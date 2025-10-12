@@ -1,53 +1,34 @@
-/*
-ESTE ARCHIVO NO SE DEBE CARGAR EN EL FRONTEND (React).
-Debe implementarse como una función sin servidor (Serverless Function) 
-en tu plataforma de hosting (Ej: Google Cloud Functions, Vercel Edge Functions, AWS Lambda).
+// Función Serverless (Proxy) para Vercel o Netlify
+// Protege tu clave de Gemini
 
-Función: Recibir la solicitud del frontend, añadir la clave de API (oculta del cliente) y
-reenviarla al servicio de Gemini.
-*/
+import { GoogleGenAI } from '@google/genai';
 
-// --- CONFIGURACIÓN DE SEGURIDAD (EN TORNO REAL, ESTO SERÍA SECRETO) ---
-// NOTA: En Vercel, esta variable se reemplaza automáticamente por el valor que ingresaste
-// en el panel de Variables de Entorno (GEMINI_API_KEY).
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "YOUR_SECURE_GEMINI_API_KEY_HERE"; 
-const BASE_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+// La clave GEMINI_API_KEY se inyecta automáticamente por Vercel desde las Variables de Entorno.
+const ai = new GoogleGenAI(process.env.GEMINI_API_KEY);
 
-// --- SERVERLESS FUNCTION HANDLER (Para Vercel) ---
-// Vercel usa la convención Node.js para las funciones dentro de la carpeta 'api'.
-export default async function (request) {
-    // 1. Vercel Cloud Functions usa .json() para leer el cuerpo
-    const url = new URL(request.url);
-    const endpoint = url.searchParams.get('endpoint'); 
-    
-    if (!endpoint) {
-        return new Response(JSON.stringify({ error: "Missing endpoint" }), { status: 400 });
+export default async function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+
+    const { prompt } = req.body;
+
+    if (!prompt) {
+        return res.status(400).json({ error: 'Missing prompt in request body.' });
     }
 
     try {
-        const payload = await request.json();
-        const model = payload.model || "gemini-2.5-flash-preview-05-20";
-
-        // 2. Construir la URL completa con la clave de API secreta
-        const apiUrl = `${BASE_GEMINI_URL}/${model}:${endpoint}?key=${GEMINI_API_KEY}`;
-        
-        // 3. Realizar la llamada real a la API de Google Gemini
-        const geminiResponse = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash', 
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            config: {
+                systemInstruction: "Eres un asistente de ventas de software de distribución. Tu tarea es generar respuestas concisas, profesionales y amigables. Utiliza emojis y un tono de WhatsApp para comunicación con clientes.",
+            },
         });
 
-        const data = await geminiResponse.json();
-
-        // 4. Devolver la respuesta a la aplicación React (Frontend)
-        return new Response(JSON.stringify(data), {
-            status: geminiResponse.status,
-            headers: { 'Content-Type': 'application/json' }
-        });
-
+        res.status(200).json({ text: response.text });
     } catch (error) {
-        console.error("Error calling Gemini API from Proxy:", error);
-        return new Response(JSON.stringify({ error: "Internal AI service failure" }), { status: 500 });
+        console.error('Error calling Gemini API:', error);
+        res.status(500).json({ error: 'Internal Server Error during AI generation.' });
     }
 }
