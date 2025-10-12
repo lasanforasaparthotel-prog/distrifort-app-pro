@@ -2,25 +2,19 @@
   "name": "distrifort-app",
   "version": "1.0.0",
   "description": "Aplicación de gestión y BI para distribuidoras de bebidas con asistencia IA (Gemini).",
-  "main": "index.html",
+  "main": "index.js",
   "scripts": {
-    "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "test": "echo \"Error: no se especificó ninguna prueba\" && exit 1"
   },
   "keywords": [
     "reaccionar",
-    "firebase",
-    "tailwind",
+    "base de fuego",
+    "viento de cola",
     "gemini-api"
   ],
   "author": "ISC",
   "license": "ISC",
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
   "devDependencies": {
     "react-scripts": "5.0.1"
   }
