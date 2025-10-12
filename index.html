@@ -10,30 +10,44 @@
         body { font-family: 'Inter', sans-serif; }
         /* Ocultar flechas de inputs de número */
         input[type=number]::-webkit-outer-spin-button,
-        input[type=number]::-webkit-inner-spin-button {-webkit-appearance: none; margin: 0;}
-        input[type=number] {-moz-appearance: textfield;}
+        input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
     </style>
 </head>
 <body>
     <noscript>Necesitas habilitar JavaScript para correr esta aplicación.</noscript>
     <div id="root"></div>
 
-    <!-- Carga de React y ReactDOM (Versión CDN para simplificar el build) -->
+    <!-- Carga de React y ReactDOM (Versión CDN para simplificar la compilación) -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     
-    <!-- Carga del Bundler Babel para interpretar JSX en el navegador -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Carga de Lucide (Íconos) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Script de la aplicación principal -->
-    <script type="text/babel" src="./src/DistriFortApp.jsx"></script>
+    <!-- Script de Firebase (CDN) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, writeBatch, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // CORRECCIÓN: Se renombra a .js para que el módulo resuelva la ruta
+        import App from './src/DistriFortApp.js'; 
 
-    <script type="text/babel">
-        // Monta la aplicación en el elemento 'root'
-        const rootElement = document.getElementById('root');
-        if (rootElement) {
-            ReactDOM.createRoot(rootElement).render(<App />);
-        }
+        // Definiciones globales necesarias para el código React
+        window.__app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window.__firebase_config = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Montar la aplicación
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container); 
+        root.render(React.createElement(App, null));
     </script>
 </body>
 </html>
