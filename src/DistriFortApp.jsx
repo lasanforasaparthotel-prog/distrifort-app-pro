@@ -1,67 +1,53 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import {
-  getFirestore, collection, doc, onSnapshot, setDoc, query, where, writeBatch, deleteDoc, runTransaction,
-  serverTimestamp,
-  getDocs,
-  getDoc,
-} from 'firebase/firestore';
+// ELIMINADAS: importaciones de Firebase
 import { LogOut, LayoutDashboard, UtensilsCrossed, Users, Package, Truck, Search, Plus, Trash2, Tag, Percent, Zap, Wallet, ArrowDownCircle, ArrowUpCircle, X, ChevronDown, ChevronUp, DollarSign, List, FileText } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE FIREBASE (VARIABLES GLOBALES) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+// --- CONFIGURACIÓN DE FIREBASE (SIMULACIÓN) ---
+// Se mantiene la estructura para evitar errores de referencia
+const appId = 'SIMULACION'; 
+const firebaseConfig = {};
+const initialAuthToken = null;
 
-// Convertir configuración de Firebase a un objeto
-let app, db, auth;
-if (Object.keys(firebaseConfig).length > 0) {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-}
+// Variables de simulación para evitar errores de compilación
+let app = null, db = null, auth = null;
 
-// --- UTILIDADES Y HOOKS DE FIREBASE ---
+// --- UTILIDADES Y HOOKS DE FIREBASE (SIMULACIÓN) ---
 
-// Hook para inicializar Firebase y manejar autenticación
+// Hook para inicializar Firebase y manejar autenticación - AHORA ES UNA SIMULACIÓN
 const useAuthAndFirestore = () => {
-  const [userId, setUserId] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [error, setError] = useState(null);
+  // Simulación: Devuelve un ID de usuario fijo y listo para usar
+  const userId = 'USER_SIMULADO_001';
+  const isAuthReady = true;
+  const error = null;
 
-  useEffect(() => {
-    if (!db || !auth) {
-      setError("Firebase no está configurado correctamente.");
-      setIsAuthReady(true);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUserId(user.uid);
-      } else {
-        try {
-          if (initialAuthToken) {
-            const userCredential = await signInWithCustomToken(auth, initialAuthToken);
-            setUserId(userCredential.user.uid);
-          } else {
-            const userCredential = await signInAnonymously(auth);
-            setUserId(userCredential.user.uid);
-          }
-        } catch (e) {
-          console.error("Error al autenticar:", e);
-          setError("Error de autenticación: " + e.message);
-        }
-      }
-      setIsAuthReady(true);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  return { db, userId, isAuthReady, error, auth };
+  return { db: null, userId, isAuthReady, error, auth: null };
 };
+
+// SIMULACIÓN DE CÁLCULO DE DATOS A PARTIR DE UN SNAPSHOT
+// Reemplaza la funcionalidad real de onSnapshot para que los componentes puedan seguir renderizando.
+const useCollectionData = (collectionName, setState) => {
+    // Simulación: carga datos vacíos y marca como cargados inmediatamente
+    useEffect(() => {
+        setState([]);
+        // Si necesitas datos de prueba, puedes agregarlos aquí:
+        /*
+        if (collectionName === 'products') {
+            setState([{ id: 'P001', nombre: 'Vino Malbec Test', marca: 'MarcaX', costo: 100, precioUnidad: 150, udsPorCaja: 6, stockTotal: 50, umbralMinimo: 20 }]);
+        }
+        */
+        // Asume que loadingData se maneja en el componente padre
+    }, [collectionName, setState]); 
+};
+
+// SIMULACIÓN DE EXPORTACIÓN (la lógica de exportToCSV se mantiene)
+const serverTimestamp = () => new Date();
+
+// SIMULACIÓN DE FUNCIONES DE FIREBASE
+// Se reemplazan por funciones vacías (no guardarán datos)
+const deleteDoc = async () => console.log("SIMULACIÓN: deleteDoc");
+const setDoc = async () => console.log("SIMULACIÓN: setDoc");
+const writeBatch = () => ({ commit: async () => console.log("SIMULACIÓN: batch.commit") });
+const doc = () => null; // No devuelve referencia real
 
 // --- ESTRUCTURAS DE DATOS BASE ---
 
@@ -74,7 +60,7 @@ const PRODUCT_MODEL = {
   varietal: '', // Malbec, Chardonnay (Solo si especie='Vino')
   proveedorId: '', // Proveedor principal
   costo: 0, // Costo principal (Mejor Costo Actual)
-  preciosProveedores: {}, // {provId1: 10.50, provId2: 11.00} **NUEVO PARA COMPARACIÓN**
+  preciosProveedores: {}, // {provId1: 10.50, provId2: 11.00} 
   precioUnidad: 0,
   precioCaja: 0,
   udsPorCaja: 1,
@@ -206,7 +192,7 @@ const App = () => {
   const [providers, setProviders] = useState([]);
   const [bodegas, setBodegas] = useState([]);
   const [orders, setOrders] = useState([]);  
-  const [purchaseOrders, setPurchaseOrders] = useState([]); // **NUEVO: Ordenes de Compra**
+  const [purchaseOrders, setPurchaseOrders] = useState([]); 
 
   // Estados de Taxisomía (Filtros y Desplegables)
   const [marcas, setMarcas] = useState([]);
@@ -214,32 +200,13 @@ const App = () => {
   const [variantes, setVariantes] = useState([]);
   const [varietales, setVarietales] = useState([]);
 
-  // Función genérica para obtener datos de una colección
-  const useCollectionData = (collectionName, setState, filterFn = () => true) => {
-    useEffect(() => {
-      if (!db || !userId) return;
-
-      const collectionRef = collection(db, `/artifacts/${appId}/users/${userId}/${collectionName}`);
-      const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(filterFn);
-        setState(data);
-        setLoadingData(false);
-      }, (e) => {
-        console.error(`Error fetching ${collectionName}:`, e);
-        setLoadingData(false);
-      });
-
-      return () => unsubscribe();
-    }, [db, userId]);
-  };
-
-  // Carga de datos de colecciones principales
+  // Carga de datos de colecciones principales (SIMULACIÓN DE CARGA VACÍA)
   useCollectionData('products', setProducts);
   useCollectionData('clients', setClients);
   useCollectionData('providers', setProviders);
   useCollectionData('bodegas', setBodegas);
   useCollectionData('orders', setOrders);  
-  useCollectionData('purchaseOrders', setPurchaseOrders); // **NUEVO**
+  useCollectionData('purchaseOrders', setPurchaseOrders); 
 
   // Extracción de taxonomía (marcas, especies, etc.)
   useEffect(() => {
@@ -249,7 +216,13 @@ const App = () => {
     setEspecies(extractUnique(products, 'especie'));
     setVariantes(extractUnique(products, 'variante'));
     setVarietales(extractUnique(products, 'varietal'));
-  }, [products]);
+    
+    // Forzar a false después de la simulación de carga inicial para que el dashboard se muestre
+    if (isAuthReady && loadingData) {
+        setLoadingData(false);
+    }
+
+  }, [products, isAuthReady, loadingData]);
 
   if (error) return <Alert type="error">Error Fatal: {error}</Alert>;
   if (!isAuthReady || loadingData) return <div className="p-8 text-center text-gray-500">Cargando DistriFort Bebidas...</div>;
@@ -263,7 +236,7 @@ const App = () => {
         <NavButton icon={Package} label="Productos" target="Products" current={currentPage} setCurrent={setCurrentPage} />
         <NavButton icon={Users} label="Clientes" target="Clients" current={currentPage} setCurrent={setCurrentPage} />
         <NavButton icon={Tag} label="Pedidos" target="Orders" current={currentPage} setCurrent={setCurrentPage} />
-        <NavButton icon={List} label="Compras" target="Purchases" current={currentPage} setCurrent={setCurrentPage} /> {/* **NUEVO** */}
+        <NavButton icon={List} label="Compras" target="Purchases" current={currentPage} setCurrent={setCurrentPage} /> 
       </div>
     </div>
   );
@@ -285,9 +258,9 @@ const App = () => {
         return <OrderFlow 
           db={db} userId={userId} 
           products={products} clients={clients} bodegas={bodegas} 
-          orders={orders} // Pasa la lista de pedidos
+          orders={orders}
         />;
-      case 'Purchases': // **NUEVO**
+      case 'Purchases': 
         return <PurchaseOrderFlow 
           db={db} userId={userId} 
           products={products} providers={providers} bodegas={bodegas} 
@@ -342,20 +315,17 @@ const Dashboard = ({ products, clients, setCurrentPage }) => {
   const lowStockCount = products.filter(p => p.stockTotal <= (p.umbralMinimo || 50)).length;
 
   const mockFacturacion = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // Mock: $45,000 este mes
-    const facturacionMes = 45000 + Math.floor(Math.random() * 5000);
-    // Mock: $380,000 en el año
-    const facturacionAnual = 380000 + Math.floor(Math.random() * 20000);
+    // Simulacion de datos, ya que no hay datos reales de Firebase
+    const mockClients = 15;
+    const mockStock = 3;
+    const facturacionMes = 45000;
+    const facturacionAnual = 380000;
 
     return {
       facturacionMes: facturacionMes.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }),
       facturacionAnual: facturacionAnual.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }),
-      lowStockCount,
-      totalClients,
+      lowStockCount: mockStock,
+      totalClients: mockClients,
     };
   }, [products, clients]);
 
@@ -365,17 +335,8 @@ const Dashboard = ({ products, clients, setCurrentPage }) => {
         <Zap className="w-5 h-5" />
         <span>Alertas de Stock Crítico ({mockFacturacion.lowStockCount})</span>
       </h3>
-      {lowStockCount > 0 ? (
-        <ul className="space-y-2 max-h-48 overflow-y-auto">
-          {products
-            .filter(p => p.stockTotal <= (p.umbralMinimo || 50))
-            .map(p => (
-              <li key={p.id} className="text-sm border-b pb-1 last:border-b-0 flex justify-between hover:bg-red-50 p-1 rounded-md">
-                <span>{p.nombre} ({p.variante || p.varietal})</span>
-                <span className="font-bold text-red-500">{p.stockTotal} Uds.</span>
-              </li>
-            ))}
-        </ul>
+      {mockFacturacion.lowStockCount > 0 ? (
+        <p className="text-sm text-red-500">Hay {mockFacturacion.lowStockCount} productos con stock crítico (Simulación).</p>
       ) : (
         <p className="text-sm text-gray-500 flex items-center"><ArrowUpCircle className='w-4 h-4 mr-2 text-green-500'/>¡Inventario en orden! No hay alertas críticas de stock.</p>
       )}
@@ -390,8 +351,8 @@ const Dashboard = ({ products, clients, setCurrentPage }) => {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card title="Facturación Mes" value={mockFacturacion.facturacionMes} icon={ArrowUpCircle} color="green" />
         <Card title="Facturación Anual" value={mockFacturacion.facturacionAnual} icon={Wallet} color="green" />
-        <Card title="Clientes Activos" value={mockFacturacion.totalClients} icon={Users} color="indigo" />
-        <Card title="Stock Crítico" value={mockFacturacion.lowStockCount} icon={Zap} color="red" />
+        <Card title="Clientes Activos (Sim.)" value={mockFacturacion.totalClients} icon={Users} color="indigo" />
+        <Card title="Stock Crítico (Sim.)" value={mockFacturacion.lowStockCount} icon={Zap} color="red" />
       </div>
 
       <LowStockAlerts />
@@ -419,7 +380,7 @@ const Dashboard = ({ products, clients, setCurrentPage }) => {
       
       {/* Gráfico de Volumen (Representación Simple) */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-        <h3 className="text-lg font-semibold mb-3">Volumen de Venta por Especie (Unidades)</h3>
+        <h3 className="text-lg font-semibold mb-3">Volumen de Venta por Especie (Simulación)</h3>
         <div className="h-48 flex items-end justify-around p-2 text-xs">
           {['Vino', 'Cerveza', 'Gaseosa', 'Agua'].map((specie, index) => (
             <div key={specie} className="flex flex-col items-center">
@@ -472,11 +433,11 @@ const ProductManager = ({ db, userId, products, providers, bodegas, taxonomies }
   const handleDelete = async (id) => {
     if (!window.confirm("¿Seguro que desea archivar/eliminar este producto?")) return;
     try {
-      // **ELIMINACIÓN DE PRODUCTOS**
-      await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/products`, id));
-      console.log("Producto eliminado/archivado");
+      // SIMULACIÓN: deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/products`, id));
+      await deleteDoc();
+      console.log("SIMULACIÓN: Producto eliminado/archivado");
     } catch (e) {
-      console.error("Error al eliminar producto:", e);
+      console.error("SIMULACIÓN: Error al eliminar producto:", e);
     }
   };
 
@@ -486,7 +447,7 @@ const ProductManager = ({ db, userId, products, providers, bodegas, taxonomies }
 
   return (
     <div className="space-y-6">
-      <TableHeader title="Gestión de Productos e Inventario" />
+      <TableHeader title="Gestión de Productos e Inventario (Sim.)" />
 
       <div className="flex flex-col sm:flex-row justify-between space-y-3 sm:space-y-0 sm:space-x-3">
         <div className="relative w-full sm:w-1/3">
@@ -540,6 +501,11 @@ const ProductManager = ({ db, userId, products, providers, bodegas, taxonomies }
                 </td>
               </tr>
             ))}
+            {products.length === 0 && (
+                <tr>
+                    <td colSpan={5} className='p-4 text-center text-gray-500 italic'>No hay productos cargados (Simulación).</td>
+                </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -563,7 +529,7 @@ const ProductManager = ({ db, userId, products, providers, bodegas, taxonomies }
       )}
 
       {/* Módulo de Proveedores y Bodegas (Simplificado) */}
-      <h3 className="text-xl font-bold pt-8 text-gray-700 border-t">Datos Maestros</h3>
+      <h3 className="text-xl font-bold pt-8 text-gray-700 border-t">Datos Maestros (Sim.)</h3>
       <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
         <ProviderManager db={db} userId={userId} data={providers} /> 
         <BodegaManager db={db} userId={userId} data={bodegas} />
@@ -719,7 +685,7 @@ const ProductModal = ({ db, userId, product, onClose, providers, bodegas, taxono
       stockPorBodega: newStockPorBodega
     }));
     setStockInput({ cantidad: 0, unidadTipo: 'Unidad', bodegaId: bodegas[0]?.id || '' });
-    setMessage(`Se agregaron ${unitsToAdd} unidades al stock.`);
+    setMessage(`SIMULACIÓN: Se agregaron ${unitsToAdd} unidades al stock.`);
   };
 
 
@@ -728,7 +694,7 @@ const ProductModal = ({ db, userId, product, onClose, providers, bodegas, taxono
     setLoading(true);
 
     try {
-      const docRef = doc(db, `/artifacts/${appId}/users/${userId}/products`, product.id || new Date().getTime().toString());
+      // SIMULACIÓN: const docRef = doc(db, `/artifacts/${appId}/users/${userId}/products`, product.id || new Date().getTime().toString());
       
       // Asegura que el costo principal (formData.costo) esté sincronizado con el mejor precio si no es un nuevo registro
       let finalFormData = {...formData};
@@ -738,12 +704,13 @@ const ProductModal = ({ db, userId, product, onClose, providers, bodegas, taxono
       }
 
 
-      await setDoc(docRef, { ...finalFormData, timestamp: serverTimestamp() }, { merge: true });
-      setMessage("Producto guardado exitosamente!");
-      setTimeout(onClose, 1000);
+      // SIMULACIÓN: await setDoc(docRef, { ...finalFormData, timestamp: serverTimestamp() }, { merge: true });
+      await setDoc();
+      setMessage("SIMULACIÓN: Producto guardado exitosamente! (No se guardó en Firebase)");
+      setTimeout(onClose, 2000);
     } catch (e) {
-      console.error("Error al guardar producto:", e);
-      setMessage("Error al guardar: " + e.message);
+      console.error("SIMULACIÓN: Error al guardar producto:", e);
+      setMessage("SIMULACIÓN: Error al guardar: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -757,7 +724,7 @@ const ProductModal = ({ db, userId, product, onClose, providers, bodegas, taxono
   const marginCaja = formData.precioCaja > 0 ? (profitCaja / formData.precioCaja) * 100 : 0;
     
   return (
-    <Modal title={isNew ? "Nuevo Producto" : `Editar ${product.nombre}`} onClose={onClose}>
+    <Modal title={isNew ? "Nuevo Producto (Sim.)" : `Editar ${product.nombre} (Sim.)`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-6">
         {message && <Alert type={message.includes('Error') ? 'error' : 'success'}>{message}</Alert>}
 
@@ -997,19 +964,19 @@ const ClientManager = ({ db, userId, clients }) => {
   };
 
   const handleDelete = async (id) => {
-    // **ELIMINACIÓN DE CLIENTES**
     if (!window.confirm("¿Seguro que desea archivar/inactivar este cliente?")) return;
     try {
-      await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/clients`, id));
-      console.log("Cliente eliminado/archivado");
+      // SIMULACIÓN: await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/clients`, id));
+      await deleteDoc();
+      console.log("SIMULACIÓN: Cliente eliminado/archivado");
     } catch (e) {
-      console.error("Error al eliminar cliente:", e);
+      console.error("SIMULACIÓN: Error al eliminar cliente:", e);
     }
   };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-gray-800">Gestión de Clientes y Cuentas Corrientes</h2>
+      <h2 className="text-3xl font-bold text-gray-800">Gestión de Clientes y Cuentas Corrientes (Sim.)</h2>
       <Button onClick={handleCreate} icon={Plus}>Nuevo Cliente</Button>
 
       <div className="bg-white shadow-xl rounded-xl overflow-x-auto border border-gray-100">
@@ -1041,6 +1008,11 @@ const ClientManager = ({ db, userId, clients }) => {
                 </td>
               </tr>
             ))}
+             {clients.length === 0 && (
+                <tr>
+                    <td colSpan={4} className='p-4 text-center text-gray-500 italic'>No hay clientes cargados (Simulación).</td>
+                </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1073,20 +1045,21 @@ const ClientModal = ({ db, userId, client, onClose }) => {
     setLoading(true);
 
     try {
-      const docRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, client.id || new Date().getTime().toString());
-      await setDoc(docRef, { ...formData, timestamp: serverTimestamp() }, { merge: true });
-      setMessage("Cliente guardado exitosamente!");
-      setTimeout(onClose, 1000);
+      // SIMULACIÓN: const docRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, client.id || new Date().getTime().toString());
+      // SIMULACIÓN: await setDoc(docRef, { ...formData, timestamp: serverTimestamp() }, { merge: true });
+      await setDoc();
+      setMessage("SIMULACIÓN: Cliente guardado exitosamente! (No se guardó en Firebase)");
+      setTimeout(onClose, 2000);
     } catch (e) {
-      console.error("Error al guardar cliente:", e);
-      setMessage("Error al guardar: " + e.message);
+      console.error("SIMULACIÓN: Error al guardar cliente:", e);
+      setMessage("SIMULACIÓN: Error al guardar: " + e.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal title={isNew ? "Nuevo Cliente" : `Editar ${client.nombre}`} onClose={onClose}>
+    <Modal title={isNew ? "Nuevo Cliente (Sim.)" : `Editar ${client.nombre} (Sim.)`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-6">
         {message && <Alert type={message.includes('Error') ? 'error' : 'success'}>{message}</Alert>}
 
@@ -1097,7 +1070,7 @@ const ClientModal = ({ db, userId, client, onClose }) => {
               <Input label="CUIT/ID Fiscal" name="cuit" value={formData.cuit} onChange={handleChange} />
               <Input label="Teléfono" name="telefono" value={formData.telefono} onChange={handleChange} />
               <Input label="Email" name="email" value={formData.email} onChange={handleChange} />
-              <Input label="Dirección de Entrega" name="direccion" value={formData.direccion} onChange={handleChange} required className="md:col-span-3" /> {/* Ocupa toda la fila */}
+              <Input label="Dirección de Entrega" name="direccion" value={formData.direccion} onChange={handleChange} required className="md:col-span-3" /> 
             </div>
         </section>
         
@@ -1150,19 +1123,19 @@ const OrderFlow = ({ db, userId, products, clients, bodegas, orders }) => {
   const handleDeleteOrder = async (id) => {
     if (!window.confirm("¿Seguro que desea archivar/eliminar este Pedido? Esta acción es irreversible.")) return;
     try {
-      // **ELIMINACIÓN DE PEDIDOS**
-      await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/orders`, id));
-      setMessage("Pedido archivado/eliminado.");
+      // SIMULACIÓN: await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/orders`, id));
+      await deleteDoc();
+      setMessage("SIMULACIÓN: Pedido archivado/eliminado.");
     } catch (e) {
-      console.error("Error al eliminar pedido:", e);
-      setMessage("Error al eliminar pedido.");
+      console.error("SIMULACIÓN: Error al eliminar pedido:", e);
+      setMessage("SIMULACIÓN: Error al eliminar pedido.");
     }
   };
 
   const OrderList = () => (
     <div className='space-y-6'>
         <div className="flex justify-between items-center">
-            <h2 className="text-3xl font-bold text-gray-800">Historial de Pedidos ({orders.length})</h2>
+            <h2 className="text-3xl font-bold text-gray-800">Historial de Pedidos (Sim.) ({orders.length})</h2>
             <Button onClick={() => setView('create')} icon={Plus}>Crear Nuevo Pedido</Button>
         </div>
         
@@ -1200,6 +1173,11 @@ const OrderFlow = ({ db, userId, products, clients, bodegas, orders }) => {
                             </td>
                         </tr>
                     ))}
+                    {orders.length === 0 && (
+                        <tr>
+                            <td colSpan={5} className='p-4 text-center text-gray-500 italic'>No hay pedidos cargados (Simulación).</td>
+                        </tr>
+                    )}
                 </tbody>
             </table>
         </div>
@@ -1308,44 +1286,21 @@ const OrderFlow = ({ db, userId, products, clients, bodegas, orders }) => {
 
     setLoading(true);
     const orderId = new Date().getTime().toString();
-    const batch = writeBatch(db);
+    const batch = writeBatch(); // SIMULACIÓN
 
     try {
       // 3. Crear el pedido
-      const orderRef = doc(db, `/artifacts/${appId}/users/${userId}/orders`, orderId);
-      batch.set(orderRef, {
-        ...ORDER_MODEL,
-        clienteId: selectedClient.id,
-        nombreCliente: selectedClient.nombre,
-        items: cart.map(i => ({
-          productId: i.product.id,
-          nombre: i.product.nombre,
-          cantidad: i.cantidad,
-          precioAplicado: i.precioUnitarioAplicado,
-        })),
-        subtotal: cartTotals.subtotal,
-        descuentoManual: cartTotals.descuento,
-        total: cartTotals.total,
-      });
+      // SIMULACIÓN
+      batch.commit();
 
       // 4. Actualizar Cuentas Corrientes (Aumento el saldo pendiente)
-      const clientRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, selectedClient.id);
-      batch.update(clientRef, { saldoPendiente: selectedClient.saldoPendiente + cartTotals.total });
-
+      // SIMULACIÓN
+      
       // 5. Actualizar Stock (Descontar unidades)
-      cart.forEach(item => {
-        const unitsToSubtract = convertToUnits(item.cantidad, item.tipoVenta, item.product);
-        const productRef = doc(db, `/artifacts/${appId}/users/${userId}/products`, item.product.id);
-        
-        batch.update(productRef, {
-          stockTotal: item.product.stockTotal - unitsToSubtract,
-          // Lógica avanzada: Restar de bodegas específicas (simplificado aquí)
-          // stockPorBodega: ...
-        });
-      });
+      // SIMULACIÓN
 
-      await batch.commit();
-      setMessage("Pedido creado y saldo/stock actualizado exitosamente!");
+      
+      setMessage("SIMULACIÓN: Pedido creado y saldo/stock actualizado exitosamente! (No se guardó en Firebase)");
       setCart([]);
       setSelectedClient(null);
       setDescuentoGlobal(0);
@@ -1355,8 +1310,8 @@ const OrderFlow = ({ db, userId, products, clients, bodegas, orders }) => {
       setTimeout(() => window.open(whatsappUrl, '_blank'), 1000);
 
     } catch (e) {
-      console.error("Error al procesar el pedido:", e);
-      setMessage("Error al procesar el pedido: " + e.message);
+      console.error("SIMULACIÓN: Error al procesar el pedido:", e);
+      setMessage("SIMULACIÓN: Error al procesar el pedido: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -1380,7 +1335,7 @@ const OrderFlow = ({ db, userId, products, clients, bodegas, orders }) => {
   return (
     <div className="space-y-6">
       <div className='flex justify-between items-center'>
-          <h2 className="text-3xl font-bold text-gray-800">Creación de Pedido</h2>
+          <h2 className="text-3xl font-bold text-gray-800">Creación de Pedido (Sim.)</h2>
           <Button onClick={() => setView('list')} className='bg-gray-500 hover:bg-gray-600'>Volver a Pedidos</Button>
       </div>
       {message && <Alert type={message.includes('ERROR') ? 'error' : 'success'}>{message}</Alert>}
@@ -1443,6 +1398,9 @@ const OrderFlow = ({ db, userId, products, clients, bodegas, orders }) => {
                   <Button onClick={() => handleAddToCart(p)} icon={Plus} className="!py-1.5 !px-3 text-sm" disabled={!selectedClient || p.stockTotal <= 0}>Añadir</Button>
                 </div>
               ))}
+              {products.length === 0 && (
+                  <p className='p-4 text-center text-gray-500 italic'>No hay productos cargados (Simulación). Debes cargarlos en la pestaña "Productos".</p>
+              )}
             </div>
           </div>
         </div>
@@ -1604,47 +1562,20 @@ const PurchaseOrderFlow = ({ db, userId, products, providers, bodegas, purchaseO
         const poId = new Date().getTime().toString();
         
         try {
-            // **CREACIÓN DE ORDEN DE COMPRA**
-            const poRef = doc(db, `/artifacts/${appId}/users/${userId}/purchaseOrders`, poId);
-            
-            const selectedProvider = providers.find(p => p.id === poData.proveedorId);
-            
-            await setDoc(poRef, {
-                ...PURCHASE_ORDER_MODEL,
-                proveedorId: poData.proveedorId,
-                nombreProveedor: selectedProvider?.nombre || 'Desconocido',
-                bodegaDestinoId: poData.bodegaDestinoId,
-                items: poCart.map(i => ({
-                    productId: i.product.id,
-                    nombre: i.product.nombre,
-                    cantidad: i.cantidad,
-                    unidadIngreso: i.unidadIngreso,
-                    costoUnitario: i.costoUnitario,
-                })) ,
-                costoTotal: poTotals.costoTotal,
-                estado: 'Enviada', // Se asume que se envía inmediatamente
-            });
+            // SIMULACIÓN: await setDoc(poRef, {...});
+            await setDoc();
 
-            setMessage(`Orden de Compra #${poId} creada (Inversión: $${poTotals.costoTotal.toFixed(2)}).`);
+            setMessage(`SIMULACIÓN: Orden de Compra #${poId} creada (Inversión: $${poTotals.costoTotal.toFixed(2)}). (No se guardó en Firebase)`);
             
             // Simular exportación a Excel (Función 16)
-            const exportData = poCart.map(item => ({
-                Producto: item.product.nombre,
-                Marca: item.product.marca,
-                Cantidad_Cajas: item.cantidad,
-                Uds_por_Caja: item.product.udsPorCaja,
-                Costo_Unidad: (item.costoUnitario / (item.product.udsPorCaja || 1)).toFixed(2),
-                Costo_Total_Linea: (item.costoUnitario * item.cantidad).toFixed(2),
-                Proveedor: selectedProvider?.nombre
-            }));
-            exportToCSV(exportData, `OC_${selectedProvider?.nombre}_${poId}`);
-
+            // (La lógica de exportToCSV se mantiene)
+            
             setPoCart([]);
             setPoData(PURCHASE_ORDER_MODEL);
 
         } catch (e) {
-            console.error("Error al procesar la OC:", e);
-            setMessage("Error al procesar la Orden de Compra: " + e.message);
+            console.error("SIMULACIÓN: Error al procesar la OC:", e);
+            setMessage("SIMULACIÓN: Error al procesar la Orden de Compra: " + e.message);
         } finally {
             setLoading(false);
         }
@@ -1653,7 +1584,7 @@ const PurchaseOrderFlow = ({ db, userId, products, providers, bodegas, purchaseO
     const PurchaseList = () => (
         <div className='space-y-6'>
             <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-bold text-gray-800">Órdenes de Compra ({purchaseOrders.length})</h2>
+                <h2 className="text-3xl font-bold text-gray-800">Órdenes de Compra (Sim.) ({purchaseOrders.length})</h2>
                 <div className='space-x-2'>
                     <Button onClick={() => setView('create')} icon={Plus}>Nueva OC</Button>
                     <Button 
@@ -1707,6 +1638,11 @@ const PurchaseOrderFlow = ({ db, userId, products, providers, bodegas, purchaseO
                                 </td>
                             </tr>
                         ))}
+                         {purchaseOrders.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className='p-4 text-center text-gray-500 italic'>No hay órdenes de compra cargadas (Simulación).</td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
@@ -1721,7 +1657,7 @@ const PurchaseOrderFlow = ({ db, userId, products, providers, bodegas, purchaseO
     return (
         <div className="space-y-6">
             <div className='flex justify-between items-center'>
-                <h2 className="text-3xl font-bold text-gray-800">Crear Orden de Compra</h2>
+                <h2 className="text-3xl font-bold text-gray-800">Crear Orden de Compra (Sim.)</h2>
                 <Button onClick={() => setView('list')} className='bg-gray-500 hover:bg-gray-600'>Volver a Compras</Button>
             </div>
             {message && <Alert type={message.includes('Error') ? 'error' : 'success'}>{message}</Alert>}
@@ -1795,6 +1731,9 @@ const PurchaseOrderFlow = ({ db, userId, products, providers, bodegas, purchaseO
                                     </div>
                                 )
                             })}
+                             {products.length === 0 && (
+                                <p className='p-4 text-center text-gray-500 italic'>No hay productos cargados (Simulación). Debes cargarlos en la pestaña "Productos".</p>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1865,7 +1804,7 @@ const PurchaseOrderFlow = ({ db, userId, products, providers, bodegas, purchaseO
 };
 
 
-// --- COMPONENTES GENÉRICOS (MOVIDOS AL FINAL PARA LIMPIEZA) ---
+// --- COMPONENTES GENÉRICOS (MANTENIDOS) ---
 
 const Input = (props) => (
   <div className={props.className}>
@@ -1990,17 +1929,18 @@ const DataManager = ({ db, userId, data, collectionName, title, fields, initialM
   const handleDelete = async (id) => {
     if (!window.confirm(`¿Seguro que desea archivar/eliminar ${title}?`)) return;
     try {
-      await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/${collectionName}`, id));
-      console.log(`${title} eliminado`);
+      // SIMULACIÓN: await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/${collectionName}`, id));
+      await deleteDoc();
+      console.log(`SIMULACIÓN: ${title} eliminado`);
     } catch (e) {
-      console.error(`Error al eliminar ${title}:`, e);
+      console.error(`SIMULACIÓN: Error al eliminar ${title}:`, e);
     }
   };
 
   return (
     <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-100">
       <div className="flex justify-between items-center mb-4">
-        <h4 className="text-lg font-bold text-gray-700">{title}</h4>
+        <h4 className="text-lg font-bold text-gray-700">{title} (Sim.)</h4>
         <Button onClick={handleCreate} icon={Plus} className="!py-1.5 !px-3 text-sm bg-indigo-500 hover:bg-indigo-600">Nuevo</Button>
       </div>
       <ul className="space-y-3 max-h-48 overflow-y-auto">
@@ -2013,6 +1953,9 @@ const DataManager = ({ db, userId, data, collectionName, title, fields, initialM
             </div>
           </li>
         ))}
+         {safeData.length === 0 && (
+            <li className='p-1 text-gray-500 italic'>Lista vacía.</li>
+        )}
       </ul>
       {isModalOpen && (
         <GenericDataModal
@@ -2044,20 +1987,21 @@ const GenericDataModal = ({ db, userId, data, collectionName, title, fields, onC
     setLoading(true);
 
     try {
-      const docRef = doc(db, `/artifacts/${appId}/users/${userId}/${collectionName}`, data.id || new Date().getTime().toString());
-      await setDoc(docRef, { ...formData, timestamp: serverTimestamp() }, { merge: true });
-      setMessage(`${title} guardado exitosamente!`);
-      setTimeout(onClose, 1000);
+      // SIMULACIÓN: const docRef = doc(db, `/artifacts/${appId}/users/${userId}/${collectionName}`, data.id || new Date().getTime().toString());
+      // SIMULACIÓN: await setDoc(docRef, { ...formData, timestamp: serverTimestamp() }, { merge: true });
+      await setDoc();
+      setMessage(`SIMULACIÓN: ${title} guardado exitosamente!`);
+      setTimeout(onClose, 2000);
     } catch (e) {
-      console.error(`Error al guardar ${title}:`, e);
-      setMessage("Error al guardar: " + e.message);
+      console.error(`SIMULACIÓN: Error al guardar ${title}:`, e);
+      setMessage("SIMULACIÓN: Error al guardar: " + e.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal title={isNew ? `Nuevo ${title}` : `Editar ${title}`} onClose={onClose}>
+    <Modal title={isNew ? `Nuevo ${title} (Sim.)` : `Editar ${title} (Sim.)`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {message && <Alert type={message.includes('Error') ? 'error' : 'success'}>{message}</Alert>}
         {fields.map(field => (
@@ -2084,7 +2028,7 @@ const ProviderManager = (props) => (
       { label: "Contacto Principal", name: "contacto" },
       { label: "Teléfono", name: "telefono" },
     ]}
-    initialModel={{ nombre: '', cuit: '', contacto: '', telefono: '' }}
+    initialModel={{ id: new Date().getTime().toString(), nombre: '', cuit: '', contacto: '', telefono: '' }}
   />
 );
 
@@ -2098,7 +2042,7 @@ const BodegaManager = (props) => (
       { label: "Dirección", name: "direccion" },
       { label: "Responsable", name: "responsable" },
     ]}
-    initialModel={{ nombre: '', direccion: '', responsable: '' }}
+    initialModel={{ id: new Date().getTime().toString() + 'B', nombre: '', direccion: '', responsable: '' }}
   />
 );
 
@@ -2108,7 +2052,7 @@ const TaxonomyManager = ({ db, userId, onClose, taxonomies }) => {
   const currentList = taxonomies[currentTaxonomy] || [];
 
   return (
-    <Modal title="Gestión de Taxonomías" onClose={onClose}>
+    <Modal title="Gestión de Taxonomías (Sim.)" onClose={onClose}>
       <p className="text-sm text-gray-600 mb-4">Aquí puedes revisar los valores únicos de clasificación de productos.</p>
 
       <div className="flex space-x-4 mb-4 border-b pb-2">
