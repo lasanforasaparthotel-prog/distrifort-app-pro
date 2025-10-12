@@ -3,51 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DistriFort - Gestión de Bebidas</title>
-    <!-- Carga de Tailwind CSS -->
+    <title>DistriFort Bebidas - Gestión</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.6/babel.min.js" crossorigin></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        /* Ocultar flechas de inputs de número */
-        input[type=number]::-webkit-outer-spin-button,
-        input[type=number]::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        input[type=number] {
-            -moz-appearance: textfield;
-        }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest"></script>
 </head>
 <body>
-    <noscript>Necesitas habilitar JavaScript para correr esta aplicación.</noscript>
     <div id="root"></div>
-
-    <!-- Carga de React y ReactDOM (Versión CDN para simplificar la compilación) -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    
-    <!-- Carga de Lucide (Íconos) -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Script de Firebase (CDN) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, writeBatch, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // CORRECCIÓN: Se renombra a .js para que el módulo resuelva la ruta
-        import App from './src/DistriFortApp.js'; 
-
-        // Definiciones globales necesarias para el código React
-        window.__app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        window.__firebase_config = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Montar la aplicación
-        const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container); 
-        root.render(React.createElement(App, null));
-    </script>
+    <script type="text/babel" src="./src/DistriFortApp.jsx"></script>
 </body>
 </html>
