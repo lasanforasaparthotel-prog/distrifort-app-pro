@@ -2,7 +2,7 @@
   "name": "distrifort-app",
   "version": "1.0.0",
   "private": true,
-  "description": "Aplicación de gestión de distribuidora de bebidas",
+  "description": "Sistema de gestión de distribuidora de bebidas DistriFort",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
@@ -10,9 +10,16 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@google/genai": "^0.3.0",
+    "lucide-react": "^0.428.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "tailwindcss": "^3.4.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38"
   },
   "browserslist": {
     "production": [
@@ -25,8 +32,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  }
 }
