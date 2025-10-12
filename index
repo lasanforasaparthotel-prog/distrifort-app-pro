@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DistriFort - Gestión de Bebidas</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Ocultar flechas de inputs de número */
+        input[type=number]::-webkit-outer-spin-button,
+        input[type=number]::-webkit-inner-spin-button {-webkit-appearance: none; margin: 0;}
+        input[type=number] {-moz-appearance: textfield;}
+    </style>
+</head>
+<body>
+    <noscript>Necesitas habilitar JavaScript para correr esta aplicación.</noscript>
+    <div id="root"></div>
+
+    <!-- Carga de React y ReactDOM (Versión CDN para simplificar el build) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- Carga del Bundler Babel para interpretar JSX en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Script de la aplicación principal -->
+    <script type="text/babel" src="./src/DistriFortApp.jsx"></script>
+
+    <script type="text/babel">
+        // Monta la aplicación en el elemento 'root'
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+            ReactDOM.createRoot(rootElement).render(<App />);
+        }
+    </script>
+</body>
+</html>
