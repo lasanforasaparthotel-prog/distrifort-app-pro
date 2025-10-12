@@ -1,6 +1,7 @@
 // api/gemini-proxy.js (Para Vercel/Netlify Serverless Function)
 
-// En Vercel o Netlify, esta variable debe configurarse en el panel de control (ej: GEMINI_API_KEY)
+// IMPORTANTE: En Vercel o Netlify, esta variable debe configurarse en el panel de control 
+// (Ej: GEMINI_API_KEY). Si no se encuentra, usa el valor de reemplazo.
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "YOUR_SECURE_GEMINI_API_KEY_HERE"; 
 const BASE_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -10,6 +11,7 @@ export default async function handler(request) {
         return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405 });
     }
 
+    // Extrae el endpoint dinámico (ej: 'generateContent')
     const url = new URL(request.url);
     const endpoint = url.searchParams.get('endpoint'); 
 
@@ -21,7 +23,7 @@ export default async function handler(request) {
         const payload = await request.json();
         const model = payload.model || "gemini-2.5-flash-preview-05-20";
 
-        // Llama a la API de Google, usando la clave segura del servidor
+        // Construye la URL completa y segura usando la clave del servidor
         const apiUrl = `${BASE_GEMINI_URL}/${model}:${endpoint}?key=${GEMINI_API_KEY}`;
         
         const geminiResponse = await fetch(apiUrl, {
