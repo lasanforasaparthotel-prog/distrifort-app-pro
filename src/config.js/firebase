@@ -1,8 +1,8 @@
-// src/firebase/config.js
-import { initializeApp, getApps } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
+// Tu configuración web de la app de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI",
   authDomain: "distrifort.firebaseapp.com",
@@ -12,9 +12,22 @@ const firebaseConfig = {
   appId: "1:456742367607:web:25341e7e3126fd7c04f172"
 };
 
-// Evita inicializar Firebase más de una vez
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+// Inicializa Firebase de forma segura
+let app, db, auth;
 
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+if (!getApps().length) {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+  } catch (error) {
+    console.error("Error al inicializar Firebase:", error);
+  }
+} else {
+  app = getApps()[0];
+  db = getFirestore(app);
+  auth = getAuth(app);
+}
 
+// Exporta las instancias para usarlas en toda la app
+export { db, auth };
