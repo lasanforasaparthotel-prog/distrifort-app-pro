@@ -1,48 +1,50 @@
-// Función serverless compatible con Vercel
-// Sirve como proxy para proteger tu clave privada de Gemini
+export const config = {
+    runtime: 'edge',
+};
 
-import { GoogleGenAI } from "@google/genai";
-
-// 🔐 En Vercel, la variable GEMINI_API_KEY se configura desde el panel:
-// Settings → Environment Variables → Add → GEMINI_API_KEY = tu_clave_real
-
-const ai = new GoogleGenAI(process.env.GEMINI_API_KEY);
-
-export default async function handler(req, res) {
-  // --- Configurar CORS para que el frontend pueda acceder ---
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método no permitido" });
-  }
-
-  try {
-    // Asegurarse de que el body venga como JSON
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const { prompt } = body;
-
-    if (!prompt) {
-      return res.status(400).json({ error: "Falta el campo 'prompt' en el body" });
+export default async function handler(req) {
+    if (req.method !== 'POST') {
+        return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
     }
 
-    // --- Llamada al modelo Gemini ---
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
+    try {
+        const { prompt } = await req.json();
+        // Vercel inyectará la clave secreta aquí de forma segura
+        const apiKey = process.env.GEMINI_API_KEY; 
+        
+        if (!apiKey) {
+             return new Response(JSON.stringify({ error: 'API key not configured' }), { status: 500 });
+        }
 
-    // Extraer texto del resultado
-    const text =
-      response?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "No se recibió respuesta del modelo.";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
 
-    // Responder al frontend
-    res.status(200).json({ text });
-  } catch (err) {
-    console.error("Error en Gemini Proxy:", err);
-    res.status(500).json({ error: "Error interno en el servidor Gemini." });
-  }
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+        };
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Error from Gemini API:", errorText);
+            return new Response(JSON.stringify({ error: `Gemini API error: ${response.statusText}` }), { status: response.status });
+        }
+
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text;
+        
+        return new Response(JSON.stringify({ text }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+    } catch (error) {
+        console.error("Error in proxy function:", error);
+        return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+    }
 }
+
