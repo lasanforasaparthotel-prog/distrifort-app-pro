@@ -28,7 +28,7 @@
   <noscript>Necesitas habilitar JavaScript para correr esta aplicación.</noscript>
   <div id="root"></div>
 
-  <!-- React + ReactDOM (Versión de Producción) -->
+  <!-- React + ReactDOM (Producción) -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react.production.min.js" crossorigin></script>
 
@@ -37,11 +37,11 @@
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 
-  <!-- Aplicación principal (con la importación corregida) -->
+  <!-- Aplicación principal -->
   <script type="module">
-    import App from './src/DistriFortApp.js'; // Corregido para compatibilidad del navegador
-    const container = document.getElementById('root');
-    const root = ReactDOM.createRoot(container);
+    // CORRECCIÓN: Se vuelve a la ruta relativa correcta
+    import App from '../src/DistriFortApp.js'; 
+    const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(React.createElement(App));
   </script>
 </body>
