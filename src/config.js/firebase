@@ -1,0 +1,20 @@
+// src/firebase/config.js
+import { initializeApp, getApps } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI",
+  authDomain: "distrifort.firebaseapp.com",
+  projectId: "distrifort",
+  storageBucket: "distrifort.appspot.com",
+  messagingSenderId: "456742367607",
+  appId: "1:456742367607:web:25341e7e3126fd7c04f172"
+};
+
+// Evita inicializar Firebase más de una vez
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+
