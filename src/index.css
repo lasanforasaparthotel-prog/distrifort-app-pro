@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Añadir aquí cualquier CSS custom si es necesario, después de las directivas */
+
+/* Corrección para asegurar que la tipografía Inter sea utilizada globalmente */
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+}
