@@ -17,7 +17,7 @@ import {
 import { 
     LayoutDashboard, Package, Users, Tag, Truck, Search, Plus, 
     Trash2, Edit, X, DollarSign, BrainCircuit, AlertCircle, Save, 
-    FileText, List, ShoppingCart, Building, LogOut, AtSign, KeyRound, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer
+    FileText, List, ShoppingCart, Building, LogOut, AtSign, KeyRound, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer, Upload, Code
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
@@ -170,9 +170,9 @@ const FORMAT_CURRENCY = (value) => (value || 0).toLocaleString('es-AR', { style:
 
 const Button = ({ children, onClick, className = '', icon: Icon, disabled = false, type = 'button' }) => (<button type={type} onClick={onClick} disabled={disabled} className={`flex items-center justify-center space-x-2 px-4 py-2 rounded-lg font-semibold transition duration-200 ${disabled ? 'bg-gray-300 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'} ${className}`}>{Icon && <Icon className="w-5 h-5" />}<span>{children}</span></button>);
 const Modal = ({ title, children, onClose }) => (<div className="fixed inset-0 bg-gray-900 bg-opacity-80 z-50 flex items-center justify-center p-4 animate-fade-in"><div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col"><div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10 rounded-t-xl"><h3 className="text-lg font-bold text-gray-800">{title}</h3><button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X /></button></div><div className="p-4 md:p-6 overflow-y-auto">{children}</div></div></div>);
-const Input = ({ label, name, value, onChange, type = 'text', required = false, placeholder = "", icon: Icon, className = '' }) => (<div><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label><div className="relative"><input type={type} name={name} value={value || ''} onChange={onChange} required={required} placeholder={placeholder} className={`w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition ${Icon ? 'pl-10' : ''} ${className}`} />{Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />}</div></div>);
+const Input = ({ label, name, value, onChange, type = 'text', required = false, placeholder = "", icon: Icon, className = '', step = 'any' }) => (<div><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label><div className="relative"><input type={type} name={name} value={value || ''} onChange={onChange} required={required} placeholder={placeholder} className={`w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition ${Icon ? 'pl-10' : ''} ${className}`} step={step} />{Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />}</div></div>);
 const Select = ({ label, name, value, onChange, children, required = false }) => (<div><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label><select name={name} value={value || ''} onChange={onChange} required={required} className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white transition">{children}</select></div>);
-const Card = ({ title, value, icon: Icon, color = 'indigo' }) => (<div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 flex-1"><div className="flex items-center justify-between"><p className="text-sm font-medium text-gray-500">{title}</p><Icon className={`w-6 h-6 text-${color}-500`} /></div><p className="text-2xl md:text-3xl font-bold mt-1 text-gray-800">{value}</p></div>);
+const Card = ({ title, value, icon: Icon, color = 'indigo', onClick }) => (<div onClick={onClick} className={`bg-white p-4 rounded-xl shadow-md border border-gray-100 flex-1 ${onClick ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''}`}><div className="flex items-center justify-between"><p className="text-sm font-medium text-gray-500">{title}</p><Icon className={`w-6 h-6 text-${color}-500`} /></div><p className="text-2xl md:text-3xl font-bold mt-1 text-gray-800">{value}</p></div>);
 const PageLoader = ({ text }) => (<div className="min-h-screen flex flex-col items-center justify-center text-gray-500"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div><p className="mt-2">{text}</p></div>);
 const PageHeader = ({ title, children }) => (<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><h2 className="text-2xl md:text-3xl font-bold text-gray-800">{title}</h2><div>{children}</div></div>);
 const GoogleIcon = () => (<svg className="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.335,44,30.038,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>);
@@ -225,7 +225,7 @@ const secureGeminiFetch = async (prompt) => {
 };
 
 
-// --- 7. PANTALLA DE AUTENTICACIÓN ---
+// --- 7. PANTALLA DE AUTENTICACIÓN (ELIMINADA, CÓDIGO SOLO PARA REFERENCIA) ---
 const AuthScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -241,38 +241,12 @@ const AuthScreen = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
-        try {
-            if (isLogin) {
-                await login(email, password);
-            } else {
-                await register(email, password);
-            }
-        } catch (err) {
-            setError(err.message.includes('auth/invalid-credential') ? 'Credenciales incorrectas.' : 'Error de autenticación.');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+        // Lógica de login/registro... (ya no se usa)
     };
     
     const handleGoogleSignIn = async () => {
-        setError('');
-        setLoading(true);
-        try {
-            await signInWithGoogle();
-        } catch (err) {
-            // El hook ya maneja el error de dominio, aquí solo mostramos errores genéricos
-            if (err.code !== 'auth/unauthorized-domain') {
-                 setError('Error al iniciar sesión con Google.');
-            }
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+        // Lógica de Google Sign-in... (ya no se usa)
     };
-
 
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -285,29 +259,6 @@ const AuthScreen = () => {
                         {currentError}
                     </div>
                 )}
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <Input label="Correo Electrónico" name="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com" icon={AtSign}/>
-                    <Input label="Contraseña" name="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" icon={KeyRound}/>
-                    <Button type="submit" className="w-full !py-3" disabled={loading}>{loading ? 'Procesando...' : (isLogin ? 'Entrar' : 'Registrarse')}</Button>
-                </form>
-                
-                <div className="my-6 flex items-center">
-                    <div className="flex-grow border-t border-gray-300"></div>
-                    <span className="flex-shrink mx-4 text-gray-400 text-sm">O</span>
-                    <div className="flex-grow border-t border-gray-300"></div>
-                </div>
-
-                <Button onClick={handleGoogleSignIn} className="w-full !bg-white !text-gray-700 border border-gray-300 hover:!bg-gray-50" disabled={loading} icon={GoogleIcon}>
-                    Continuar con Google
-                </Button>
-
-                <p className="text-center text-sm text-gray-600 mt-6">
-                    {isLogin ? '¿No tienes una cuenta?' : '¿Ya tienes una cuenta?'}
-                    <button onClick={() => {setIsLogin(!isLogin); setError('');}} className="font-semibold text-indigo-600 hover:text-indigo-500 ml-1">
-                        {isLogin ? 'Regístrate' : 'Inicia Sesión'}
-                    </button>
-                </p>
             </div>
         </div>
     );
@@ -409,6 +360,7 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
                     Aplicar
                 </Button>
             </div>
+            {/* Campo oculto para asegurar que stockTotal se envíe en el submit */}
             <input type="hidden" name="stockTotal" value={item.stockTotal} />
         </div>
     );
@@ -603,9 +555,10 @@ const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
 
 
 const OrderForm = ({ model, onSave, onCancel }) => {
-    const { clients, products } = useData();
+    const { clients, products, createOrUpdateDoc } = useData(); // Se agregó createOrUpdateDoc
     const [order, setOrder] = useState(model);
     const [selectedProductId, setSelectedProductId] = useState('');
+    const selectedClient = useMemo(() => clients.find(c => c.id === order.clienteId), [order.clienteId, clients]);
     const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
 
     // Calcular totales
@@ -629,12 +582,17 @@ const OrderForm = ({ model, onSave, onCancel }) => {
     const handleAddItem = () => {
         if (!selectedProduct || order.items.some(i => i.productId === selectedProductId)) return;
 
+        // Determinar el precio basado en el régimen (simple)
+        const price = selectedClient?.regimen === 'Mayorista' && selectedProduct.precioCaja > 0 
+            ? selectedProduct.precioCaja 
+            : selectedProduct.precioUnidad;
+
         const newItem = {
             productId: selectedProduct.id,
             nombreProducto: selectedProduct.nombre,
             cantidad: 1,
-            precioUnidad: selectedProduct.precioUnidad,
-            subtotalLinea: selectedProduct.precioUnidad * 1,
+            precioUnidad: price,
+            subtotalLinea: price * 1,
         };
 
         setOrder(prev => ({ ...prev, items: [...prev.items, newItem] }));
@@ -643,7 +601,9 @@ const OrderForm = ({ model, onSave, onCancel }) => {
 
     const handleUpdateItem = (index, key, value) => {
         const newItems = [...order.items];
-        newItems[index][key] = value;
+        const numericValue = parseFloat(value) || 0;
+
+        newItems[index][key] = numericValue;
         newItems[index].subtotalLinea = newItems[index].cantidad * newItems[index].precioUnidad;
         setOrder(prev => ({ ...prev, items: newItems }));
     };
@@ -653,12 +613,60 @@ const OrderForm = ({ model, onSave, onCancel }) => {
         setOrder(prev => ({ ...prev, items: newItems }));
     };
 
-    const handleSubmit = e => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!order.clienteId) return alert("Debes seleccionar un cliente."); // Usando alert temporalmente para validación simple
         if (order.items.length === 0) return alert("El pedido debe tener al menos un producto.");
-        onSave(order);
+        
+        // --- Lógica de Transacción (Guardar Pedido, Actualizar Saldo y Stock) ---
+        
+        // 1. Crear batch
+        const batch = writeBatch(db);
+        
+        // 2. Referencias a documentos
+        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${order.userId}/orders`)).id; // Nuevo ID si no existe
+        const orderRef = doc(db, `/artifacts/${appId}/users/${order.userId}/orders`, orderId);
+        const clientRef = doc(db, `/artifacts/${appId}/users/${order.userId}/clients`, order.clienteId);
+
+        // 3. Crear/Actualizar Pedido
+        batch.set(orderRef, { 
+            ...order, 
+            timestamp: serverTimestamp(),
+            // Asegurarse de que los valores numéricos se guarden como números
+            subtotal: parseFloat(order.subtotal) || 0,
+            total: parseFloat(order.total) || 0,
+            costoEnvio: parseFloat(order.costoEnvio) || 0,
+            descuento: parseFloat(order.descuento) || 0,
+            // Eliminar propiedades innecesarias/temporales
+            userId: order.userId || auth.currentUser.uid, 
+            id: orderId
+        }, { merge: true });
+
+        // 4. Actualizar Saldo del Cliente (Asumiendo que el pedido es "a crédito" por simplicidad)
+        const newSaldoPendiente = (selectedClient.saldoPendiente || 0) + (order.total || 0);
+        batch.update(clientRef, { saldoPendiente: newSaldoPendiente });
+
+        // 5. Actualizar Stock de Productos
+        for (const item of order.items) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+                const productRef = doc(db, `/artifacts/${appId}/users/${order.userId}/products`, item.productId);
+                const newStockTotal = product.stockTotal - item.cantidad;
+                batch.update(productRef, { stockTotal: newStockTotal });
+            }
+        }
+
+        // 6. Ejecutar Batch
+        try {
+            await batch.commit();
+            alert("¡Pedido Guardado y Stock Actualizado!");
+            onSave({ ...order, id: orderId }); // Llamar a onSave para cerrar el modal
+        } catch (e) {
+            console.error("Error al ejecutar la transacción:", e);
+            alert("Error al guardar el pedido. Revise la consola.");
+        }
     };
+
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -705,8 +713,9 @@ const OrderForm = ({ model, onSave, onCancel }) => {
                                         <input 
                                             type="number" 
                                             min="1"
+                                            step="1"
                                             value={item.cantidad} 
-                                            onChange={e => handleUpdateItem(index, 'cantidad', parseFloat(e.target.value) || 0)} 
+                                            onChange={e => handleUpdateItem(index, 'cantidad', e.target.value)} 
                                             className="w-full p-1 border rounded text-center"
                                         />
                                     </td>
@@ -714,7 +723,7 @@ const OrderForm = ({ model, onSave, onCancel }) => {
                                         <input 
                                             type="number" 
                                             value={item.precioUnidad} 
-                                            onChange={e => handleUpdateItem(index, 'precioUnidad', parseFloat(e.target.value) || 0)} 
+                                            onChange={e => handleUpdateItem(index, 'precioUnidad', e.target.value)} 
                                             className="w-full p-1 border rounded text-right"
                                         />
                                     </td>
@@ -939,7 +948,9 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 
     const handleUpdateItem = (index, key, value) => {
         const newItems = [...po.items];
-        newItems[index][key] = value;
+        const numericValue = parseFloat(value) || 0;
+
+        newItems[index][key] = numericValue;
         newItems[index].subtotalLinea = newItems[index].cantidad * newItems[index].costoUnidad;
         setPo(prev => ({ ...prev, items: newItems }));
     };
@@ -999,8 +1010,9 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
                                         <input 
                                             type="number" 
                                             min="1"
+                                            step="1"
                                             value={item.cantidad} 
-                                            onChange={e => handleUpdateItem(index, 'cantidad', parseFloat(e.target.value) || 0)} 
+                                            onChange={e => handleUpdateItem(index, 'cantidad', e.target.value)} 
                                             className="w-full p-1 border rounded text-center"
                                         />
                                     </td>
@@ -1008,7 +1020,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
                                         <input 
                                             type="number" 
                                             value={item.costoUnidad} 
-                                            onChange={e => handleUpdateItem(index, 'costoUnidad', parseFloat(e.target.value) || 0)} 
+                                            onChange={e => handleUpdateItem(index, 'costoUnidad', e.target.value)} 
                                             className="w-full p-1 border rounded text-right"
                                         />
                                     </td>
@@ -1495,7 +1507,7 @@ const Tools = () => {
     );
 };
 
-const Dashboard = () => {
+const Dashboard = ({ setCurrentPage }) => {
     const { products, orders, clients, purchaseOrders } = useData();
 
     // 1. Métricas de Inventario
@@ -1529,8 +1541,10 @@ const Dashboard = () => {
         return orders.reduce((sum, order) => {
             const orderCost = order.items.reduce((costSum, item) => {
                 const costPerUnit = productCostMap.get(item.productId) || 0;
-                return costSum + (costPerUnit * item.cantidad);
+                // Usamos item.cantidad del pedido
+                return costSum + (costPerUnit * item.cantidad); 
             }, 0);
+            // Ganancia = Ingreso - Costo
             return sum + (order.total - orderCost);
         }, 0);
     }, [orders, productCostMap]);
@@ -1541,14 +1555,14 @@ const Dashboard = () => {
     }, [totalRevenue, grossProfitTotal]);
 
     const dashboardCards = [
-        { title: "Ingreso Total (Histórico)", value: FORMAT_CURRENCY(totalRevenue), icon: DollarSign, color: "green" },
-        { title: "Margen Bruto (%)", value: `${grossMarginPercent.toFixed(1)}%`, icon: TrendingUp, color: grossMarginPercent >= 20 ? "green" : "red" },
-        { title: "Valor del Inventario", value: FORMAT_CURRENCY(totalInventoryValue), icon: Package, color: "indigo" },
-        { title: "Ingreso del Mes", value: FORMAT_CURRENCY(revenueThisMonth), icon: FileText, color: "blue" },
-        { title: "Productos Stock Bajo", value: lowStockCount, icon: AlertCircle, color: lowStockCount > 0 ? "red" : "green" },
-        { title: "Pedidos Pendientes", value: orders.filter(o => o.estado === 'Pendiente').length, icon: ShoppingCart, color: "yellow" },
-        { title: "Cuentas por Cobrar", value: FORMAT_CURRENCY(clients.reduce((sum, c) => sum + c.saldoPendiente, 0)), icon: TrendingDown, color: "red" },
-        { title: "Órdenes de Compra (Pendientes)", value: purchaseOrders.filter(po => po.estado === 'Pendiente').length, icon: Truck, color: "indigo" },
+        { title: "Ingreso Total (Histórico)", value: FORMAT_CURRENCY(totalRevenue), icon: DollarSign, color: "green", page: 'Pedidos' },
+        { title: "Margen Bruto (%)", value: `${grossMarginPercent.toFixed(1)}%`, icon: TrendingUp, color: grossMarginPercent >= 20 ? "green" : "red", page: 'Herramientas' },
+        { title: "Valor del Inventario", value: FORMAT_CURRENCY(totalInventoryValue), icon: Package, color: "indigo", page: 'Inventario' },
+        { title: "Ingreso del Mes", value: FORMAT_CURRENCY(revenueThisMonth), icon: FileText, color: "blue", page: 'Pedidos' },
+        { title: "Productos Stock Bajo", value: lowStockCount, icon: AlertCircle, color: lowStockCount > 0 ? "red" : "green", page: 'Inventario' },
+        { title: "Pedidos Pendientes", value: orders.filter(o => o.estado === 'Pendiente').length, icon: ShoppingCart, color: "yellow", page: 'Pedidos' },
+        { title: "Cuentas por Cobrar", value: FORMAT_CURRENCY(clients.reduce((sum, c) => sum + c.saldoPendiente, 0)), icon: TrendingDown, color: "red", page: 'Clientes' },
+        { title: "Órdenes de Compra (Pendientes)", value: purchaseOrders.filter(po => po.estado === 'Pendiente').length, icon: Truck, color: "indigo", page: 'Órdenes de Compra' },
     ];
 
 
@@ -1560,7 +1574,14 @@ const Dashboard = () => {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                 {dashboardCards.map(card => (
-                    <Card key={card.title} {...card} />
+                    <Card 
+                        key={card.title} 
+                        title={card.title} 
+                        value={card.value} 
+                        icon={card.icon} 
+                        color={card.color} 
+                        onClick={() => setCurrentPage(card.page)}
+                    />
                 ))}
             </div>
 
@@ -1574,34 +1595,163 @@ const Dashboard = () => {
     );
 };
 
+// 8.8 Módulo Importador de Listas de Precios (NUEVO)
+const PriceListImporter = () => {
+    const { providers, products, createOrUpdateDoc } = useData();
+    const [providerId, setProviderId] = useState('');
+    const [listText, setListText] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [importLog, setImportLog] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!providerId) {
+            setImportLog("Error: Debes seleccionar un proveedor.");
+            return;
+        }
+        if (!listText.trim()) {
+            setImportLog("Error: El campo de texto de la lista de precios está vacío.");
+            return;
+        }
+
+        setLoading(true);
+        setImportLog("1. Estructurando datos con IA...");
+
+        // 1. Usar la IA para formatear el texto a JSON
+        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo" y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+        
+        let jsonResponse;
+        try {
+            const resultText = await secureGeminiFetch(aiPrompt);
+            // Intentar limpiar y parsear el JSON
+            const cleanedText = resultText.replace(/```json|```/g, '').trim();
+            jsonResponse = JSON.parse(cleanedText);
+            setImportLog("2. Datos estructurados correctamente. Procesando importación...");
+        } catch (e) {
+            console.error("AI/JSON Parsing Error:", e);
+            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro.`);
+            setLoading(false);
+            return;
+        }
+
+        // 2. Procesar e importar los datos
+        const providerName = providers.find(p => p.id === providerId)?.nombre || 'Desconocido';
+        let updatesCount = 0;
+        
+        const errors = [];
+
+        for (const item of jsonResponse) {
+            if (!item.nombre || !item.costo || !item.precioUnidad) {
+                errors.push(`Saltando ítem incompleto: ${item.nombre}`);
+                continue;
+            }
+            
+            // Buscar si el producto ya existe por nombre
+            const existingProduct = products.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim());
+
+            if (existingProduct) {
+                // Actualizar producto existente (solo costo/precio)
+                await createOrUpdateDoc('products', {
+                    costo: parseFloat(item.costo) || 0,
+                    // OPCIONAL: También puedes actualizar el precio de venta si lo deseas
+                    // precioUnidad: parseFloat(item.precioUnidad) || existingProduct.precioUnidad
+                }, existingProduct.id);
+                updatesCount++;
+            } else {
+                // Crear nuevo producto (con valores del modelo por defecto)
+                await createOrUpdateDoc('products', {
+                    ...PRODUCT_MODEL,
+                    nombre: item.nombre,
+                    costo: parseFloat(item.costo) || 0,
+                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                    marca: `${providerName} / Listado`, // Marca del proveedor
+                });
+                updatesCount++;
+            }
+        }
+
+        setImportLog(`Éxito: Se procesaron ${updatesCount} ítems (${errors.length} errores/saltos). Productos creados/actualizados en el Inventario.`);
+        setLoading(false);
+        setListText('');
+    };
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Importador de Listas de Precios (IA)">
+                <p className="text-sm text-gray-500">Utiliza la IA para convertir texto plano de listas de precios en datos de productos.</p>
+            </PageHeader>
+            
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <Select label="Proveedor de la Lista" name="providerId" value={providerId} onChange={e => setProviderId(e.target.value)} required>
+                        <option value="">-- Seleccione el Proveedor --</option>
+                        {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </Select>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pegar Contenido de la Lista (PDF/Excel)</label>
+                        <textarea 
+                            value={listText}
+                            onChange={e => setListText(e.target.value)}
+                            rows="10"
+                            placeholder="Copia y pega el texto de tu lista de precios aquí. Asegúrate de incluir el nombre del producto y su costo/precio."
+                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                            required
+                        />
+                    </div>
+                    
+                    <Button type="submit" icon={Upload} disabled={loading || !providerId || !listText.trim()}>
+                        {loading ? 'Procesando con IA...' : 'Importar Productos y Precios'}
+                    </Button>
+                </form>
+
+                {importLog && (
+                    <div className={`p-4 rounded-lg text-sm ${importLog.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        <h4 className="font-bold">Registro de Importación:</h4>
+                        <p>{importLog}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- 9. APP PRINCIPAL Y NAVEGACIÓN ---
 const AppLayout = () => {
     const { logout } = useData();
-    const [currentPage, setCurrentPage] = useState('Dashboard');
+    // Usamos useState para mantener el estado de la página en AppLayout
+    const [currentPage, setCurrentPage] = useState('Dashboard'); 
     
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard }, { name: 'Inventario', icon: Package },
         { name: 'Clientes', icon: Users }, { name: 'Proveedores', icon: Building },
         { name: 'Pedidos', icon: ShoppingCart }, { name: 'Órdenes de Compra', icon: Truck },
-        { name: 'Lista de Precios', icon: FileText }, // RESTAURADO
+        { name: 'Lista de Precios', icon: FileText }, 
+        { name: 'Importar Lista (IA)', icon: Upload }, // NUEVO MÓDULO
         { name: 'Buscar', icon: Search }, { name: 'Herramientas', icon: BrainCircuit },
         { name: 'Cotización', icon: MapPin }, 
     ];
 
+    // Función para cambiar de página desde el Dashboard
+    const handleSetCurrentPage = (pageName) => {
+        setCurrentPage(pageName);
+    };
+
     const renderPage = () => {
         if (!db) return <div className="text-center text-red-500">Error: La configuración de Firebase no se pudo cargar.</div>
         switch (currentPage) {
-            case 'Dashboard': return <Dashboard />;
+            case 'Dashboard': return <Dashboard setCurrentPage={handleSetCurrentPage} />; // Pasa la función de navegación
             case 'Inventario': return <ProductManager />;
             case 'Clientes': return <ClientManager />;
             case 'Proveedores': return <ProviderManager />;
             case 'Pedidos': return <OrderManager />; 
             case 'Órdenes de Compra': return <PurchaseOrderManager />;
-            case 'Lista de Precios': return <PriceListManager />; // RESTAURADO
+            case 'Lista de Precios': return <PriceListManager />;
+            case 'Importar Lista (IA)': return <PriceListImporter />; // NUEVO
             case 'Buscar': return <GlobalSearch />; 
             case 'Herramientas': return <Tools />; 
             case 'Cotización': return <ShippingQuoter />; 
-            default: return <Dashboard />;
+            default: return <Dashboard setCurrentPage={handleSetCurrentPage} />;
         }
     };
     
@@ -1609,9 +1759,10 @@ const AppLayout = () => {
         <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
             <nav className="fixed bottom-0 left-0 right-0 md:relative md:w-64 bg-white shadow-lg p-2 md:p-4 flex flex-col shrink-0 z-20 border-t md:border-t-0 md:shadow-none md:border-r">
                 <h1 className="hidden md:block text-2xl font-black text-indigo-600 mb-8 px-2">DistriFort</h1>
-                <ul className="flex flex-row justify-around md:flex-col md:space-y-2 flex-grow">
+                {/* Scroll horizontal para móvil: flex, overflow-x-auto, whitespace-nowrap */}
+                <ul className="flex flex-row md:flex-col md:space-y-2 flex-grow overflow-x-auto whitespace-nowrap md:overflow-x-visible">
                     {navItems.map(item => (
-                        <li key={item.name}>
+                        <li key={item.name} className="flex-shrink-0 md:flex-shrink">
                             <button onClick={() => setCurrentPage(item.name)} className={`w-full flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-3 p-1 md:p-3 rounded-lg text-center md:text-left font-semibold transition ${currentPage === item.name ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100 hover:text-indigo-600'}`}>
                                 <item.icon className="w-6 h-6" />
                                 <span className="text-xs md:text-base">{item.name}</span>
@@ -1647,12 +1798,9 @@ const AppController = () => {
     if (!isAuthReady) {
         return <PageLoader text="Inicializando..." />;
     }
-
-    // Si no hay un userId (es decir, el anónimo no fue forzado o falló),
-    // forzamos la carga de la aplicación ya que quitamos la pantalla de login.
-    // El usuario siempre tendrá un userId (anónimo) aquí debido al useAuth.
     
     if(loading) {
+        // Mostramos cargando solo si la Auth está lista pero los datos no han llegado
         return <PageLoader text="Cargando datos..." />;
     }
 
