@@ -1,33 +1,23 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { getFirestore } from "firebase/firestore"; // Importación de Firestore
 
-// Tu configuración web de la app de Firebase
+// Las claves deben ser cargadas desde variables de entorno en producción (Vercel)
 const firebaseConfig = {
-  apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI",
+  // NOTA: Reemplaza estos valores por process.env.NEXT_PUBLIC_... en tu código fuente
+  apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI", 
   authDomain: "distrifort.firebaseapp.com",
   projectId: "distrifort",
-  storageBucket: "distrifort.appspot.com",
+  storageBucket: "distrifort.firebasestorage.app",
   messagingSenderId: "456742367607",
-  appId: "1:456742367607:web:25341e7e3126fd7c04f172"
+  appId: "1:456742367607:web:25341e7e3126fd7c04f172",
+  measurementId: "G-F62DMRC8NZ"
 };
 
-// Inicializa Firebase de forma segura
-let app, db, auth;
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getFirestore(app); // Inicializar Firestore
 
-if (!getApps().length) {
-  try {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
-  } catch (error) {
-    console.error("Error al inicializar Firebase:", error);
-  }
-} else {
-  app = getApps()[0];
-  db = getFirestore(app);
-  auth = getAuth(app);
-}
-
-// Exporta las instancias para usarlas en toda la app
-export { db, auth };
+// Exportar la instancia de la Base de Datos
+export { db };
