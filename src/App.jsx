@@ -56,17 +56,22 @@ const useAuth = () => {
         }
         
         const unsub = onAuthStateChanged(auth, user => {
-            if (user) {
+            if (user && user.isAnonymous === false) {
+                // Usuario autenticado con email/Google
+                setUserId(user.uid);
+                setIsAuthReady(true);
+            } else if (user && user.isAnonymous === true) {
+                 // Usuario anónimo (fallback)
                 setUserId(user.uid);
                 setIsAuthReady(true);
             } else {
-                // Intentamos iniciar sesión anónimamente como FALLBACK
+                 // No hay usuario, intentamos el fallback anónimo
                 signInAnonymously(auth).then(cred => {
                     setUserId(cred.user.uid);
                     setIsAuthReady(true);
                 }).catch(e => {
                     console.error("Error en el fallback de autenticación anónima:", e);
-                    setAuthDomainError(true); // Si falla hasta el anónimo, hay un problema grave
+                    setAuthDomainError(true); 
                     setIsAuthReady(true);
                 });
             }
@@ -502,6 +507,8 @@ const ProductManager = () => {
                     model={poDraft} 
                     onSave={handleSavePO} 
                     onCancel={() => setIsPOCreationOpen(false)}
+                    products={products}
+                    providers={providers}
                     ref={poRef}
                 />
              </Modal>
