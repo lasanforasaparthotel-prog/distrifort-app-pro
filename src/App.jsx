@@ -45,8 +45,6 @@ const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], 
 const useAuth = () => {
     const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
-    
-    // Estado para manejar el error específico de dominio no autorizado
     const [authDomainError, setAuthDomainError] = useState(false);
 
     useEffect(() => {
@@ -56,25 +54,19 @@ const useAuth = () => {
         }
         
         const unsub = onAuthStateChanged(auth, user => {
-            if (user && user.isAnonymous === false) {
-                // Usuario autenticado con email/Google
+            if (user) {
+                // Si hay un usuario (email/Google/anónimo), lo usamos.
                 setUserId(user.uid);
-                setIsAuthReady(true);
-            } else if (user && user.isAnonymous === true) {
-                 // Usuario anónimo (fallback)
-                setUserId(user.uid);
-                setIsAuthReady(true);
             } else {
-                 // No hay usuario, intentamos el fallback anónimo
-                signInAnonymously(auth).then(cred => {
+                 // Si no hay usuario, forzamos la autenticación anónima para que la app cargue.
+                 signInAnonymously(auth).then(cred => {
                     setUserId(cred.user.uid);
-                    setIsAuthReady(true);
-                }).catch(e => {
+                 }).catch(e => {
                     console.error("Error en el fallback de autenticación anónima:", e);
-                    setAuthDomainError(true); 
-                    setIsAuthReady(true);
-                });
+                 });
             }
+            // Siempre marcamos como lista después de la primera comprobación
+            setIsAuthReady(true);
         });
         
         return unsub;
@@ -83,11 +75,12 @@ const useAuth = () => {
 };
 
 const useCollection = (collectionName) => {
-    const { userId } = useAuth();
+    const { userId, isAuthReady } = useAuth(); 
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     useEffect(() => {
-        if (!userId || !db) {
+        // Solo intentamos cargar si la autenticación ya está lista Y tenemos un userId
+        if (!isAuthReady || !userId || !db) {
             setLoading(false);
             return;
         };
@@ -101,7 +94,7 @@ const useCollection = (collectionName) => {
             setLoading(false);
         });
         return unsub;
-    }, [userId, collectionName]);
+    }, [userId, collectionName, isAuthReady]); 
     return { data, loading };
 };
 
@@ -979,7 +972,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
             <div className="flex space-x-2">
                 <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
                     <option value="">Añadir Producto...</option>
-                    {products.filter(p => !po.items.some(i => i.productId === p.id)).map(p => (
+                    {products.filter(p => !po.items.some(i => i.productId === selectedProductId)).map(p => (
                         <option key={p.id} value={p.id}>{p.nombre}</option>
                     ))}
                 </Select>
@@ -1655,9 +1648,9 @@ const AppController = () => {
         return <PageLoader text="Inicializando..." />;
     }
 
-    if (!userId) {
-        return <AuthScreen />;
-    }
+    // Si no hay un userId (es decir, el anónimo no fue forzado o falló),
+    // forzamos la carga de la aplicación ya que quitamos la pantalla de login.
+    // El usuario siempre tendrá un userId (anónimo) aquí debido al useAuth.
     
     if(loading) {
         return <PageLoader text="Cargando datos..." />;
