@@ -417,9 +417,46 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
 };
 
 const ProductManager = () => {
-    const { products, createOrUpdateDoc, archiveDoc } = useData();
+    const { products, providers, createOrUpdateDoc, archiveDoc } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
+    const lowStockProducts = useMemo(() => products.filter(p => p.stockTotal <= p.umbralMinimo), [products]);
+    const [isPOCreationOpen, setIsPOCreationOpen] = useState(false);
+    const [poDraft, setPODraft] = useState(null);
+    const poRef = useRef();
+
+    // Función para crear un borrador de OC con productos en bajo stock
+    const handleGeneratePO = () => {
+        if (lowStockProducts.length === 0) return alert("No hay productos con stock bajo para generar una Orden de Compra.");
+        
+        // Crear items para la OC (cantidad a comprar: 2 cajas por defecto)
+        const poItems = lowStockProducts.map(p => ({
+            productId: p.id,
+            nombreProducto: p.nombre,
+            cantidad: p.udsPorCaja * 2, // 2 cajas por defecto
+            costoUnidad: p.costo,
+            subtotalLinea: p.costo * p.udsPorCaja * 2,
+        }));
+        
+        // Calcular costo total
+        const costoTotal = poItems.reduce((sum, item) => sum + item.subtotalLinea, 0);
+
+        setPODraft({
+            ...PURCHASE_ORDER_MODEL,
+            items: poItems,
+            costoTotal: costoTotal,
+            nombreProveedor: providers.length > 0 ? providers[0].nombre : '',
+            proveedorId: providers.length > 0 ? providers[0].id : '',
+        });
+        setIsPOCreationOpen(true);
+    };
+
+    const handleSavePO = async (poData) => {
+        await createOrUpdateDoc('purchaseOrders', poData);
+        setIsPOCreationOpen(false);
+        setPODraft(null);
+    };
+
 
     const handleStockUpdate = (newStock) => {
         setSelectedItem(prev => ({ ...prev, stockTotal: newStock }));
@@ -440,13 +477,36 @@ const ProductManager = () => {
     
     return (<div className="space-y-6">
         <PageHeader title="Inventario">
-            <Button onClick={handleAddNew} icon={Plus}>Añadir Producto</Button>
+            <div className="flex space-x-2">
+                {lowStockProducts.length > 0 && (
+                     <Button 
+                        onClick={handleGeneratePO} 
+                        icon={Truck} 
+                        className="!bg-red-500 hover:!bg-red-600 animate-pulse"
+                        title={`Generar OC con ${lowStockProducts.length} productos bajos`}
+                    >
+                        Generar OC ({lowStockProducts.length})
+                    </Button>
+                )}
+                <Button onClick={handleAddNew} icon={Plus}>Añadir Producto</Button>
+            </div>
         </PageHeader>
         {isModalOpen && <Modal title={(selectedItem ? "Editar " : "Nuevo ") + "Producto"} onClose={() => setIsModalOpen(false)}>
             <FormComponent model={selectedItem || PRODUCT_MODEL} onSave={handleSave} onCancel={() => setIsModalOpen(false)}>
                 <ProductFormFields onStockUpdate={handleStockUpdate} />
             </FormComponent>
         </Modal>}
+        {isPOCreationOpen && poDraft && (
+             <Modal title="Generar Orden de Compra (Stock Bajo)" onClose={() => setIsPOCreationOpen(false)}>
+                <PurchaseOrderForm 
+                    model={poDraft} 
+                    onSave={handleSavePO} 
+                    onCancel={() => setIsPOCreationOpen(false)}
+                    ref={poRef}
+                />
+             </Modal>
+        )}
+
         <div className="bg-white shadow-lg rounded-xl overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -840,8 +900,7 @@ const PurchaseOrderPrintable = React.forwardRef(({ po, provider }, ref) => (
 ));
 
 
-const PurchaseOrderForm = ({ model, onSave, onCancel }) => {
-    const { providers, products } = useData();
+const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => {
     const [po, setPo] = useState(model);
     const [selectedProductId, setSelectedProductId] = useState('');
     const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
@@ -869,9 +928,9 @@ const PurchaseOrderForm = ({ model, onSave, onCancel }) => {
         const newItem = {
             productId: selectedProduct.id,
             nombreProducto: selectedProduct.nombre,
-            cantidad: 1,
+            cantidad: selectedProduct.udsPorCaja || 1, // Sugiere 1 caja por defecto
             costoUnidad: selectedProduct.costo, // Usamos el costo del producto como valor inicial
-            subtotalLinea: selectedProduct.costo * 1,
+            subtotalLinea: selectedProduct.costo * (selectedProduct.udsPorCaja || 1),
         };
 
         setPo(prev => ({ ...prev, items: [...prev.items, newItem] }));
@@ -975,7 +1034,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel }) => {
 };
 
 const PurchaseOrderManager = () => {
-    const { purchaseOrders, providers, createOrUpdateDoc, archiveDoc } = useData();
+    const { purchaseOrders, providers, products, createOrUpdateDoc, archiveDoc } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const componentRef = useRef(); // Ref para impresión
@@ -1001,7 +1060,13 @@ const PurchaseOrderManager = () => {
             <Button onClick={handleAddNew} icon={Plus}>Añadir Orden de Compra</Button>
         </PageHeader>
         {isModalOpen && <Modal title={(selectedItem ? "Editar " : "Nueva ") + "Orden de Compra"} onClose={() => setIsModalOpen(false)}>
-            <PurchaseOrderForm model={selectedItem || PURCHASE_ORDER_MODEL} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />
+            <PurchaseOrderForm 
+                model={selectedItem || PURCHASE_ORDER_MODEL} 
+                onSave={handleSave} 
+                onCancel={() => setIsModalOpen(false)} 
+                products={products}
+                providers={providers}
+            />
         </Modal>}
         
         {/* Documento de Impresión Oculto */}
@@ -1321,7 +1386,7 @@ const ProfitCalculator = () => {
     ];
 
     return (
-        <div className="space-y-6 lg:col-span-2">
+        <div className="space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
                 <h4 className="text-xl font-semibold text-gray-700">Calcular Rentabilidad</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1375,7 +1440,7 @@ const AIChat = () => {
     };
 
     return (
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md space-y-4 flex flex-col h-full min-h-[50vh]">
+        <div className="bg-white p-6 rounded-xl shadow-md space-y-4 flex flex-col h-full min-h-[50vh]">
             <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2"><BrainCircuit className="w-6 h-6"/><span>Asistente de Distribución IA</span></h4>
             
             <div className="flex-1 overflow-y-auto p-3 bg-gray-50 rounded-lg whitespace-pre-wrap text-sm text-gray-800">
@@ -1422,7 +1487,7 @@ const Tools = () => {
                     </Button>
                 </div>
             </PageHeader>
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {subPage === 'calculator' && <ProfitCalculator />}
                 {subPage === 'ai' && <AIChat />}
             </div>
