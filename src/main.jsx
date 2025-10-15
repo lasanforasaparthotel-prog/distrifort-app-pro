@@ -1,9 +1,15 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+// Importamos los estilos globales
 import "./index.css";
-// --- ASEGÚRATE DE QUE LA RUTA DE IMPORTACIÓN COINCIDA CON EL NOMBRE ---
-import DistriFortApp from "./app"; // O "./app.jsx" dependiendo de tu configuración de entorno.
+// Importamos el componente principal. Asegúrate de que esta ruta sea correcta:
+import DistriFortApp from "./App"; // Si el archivo se llama App.jsx
 
 const container = document.getElementById("root");
 const root = createRoot(container);
-root.render(<DistriFortApp />);
+// Usamos StrictMode para desarrollo
+root.render(
+  <React.StrictMode>
+    <DistriFortApp />
+  </React.StrictMode>
+);
