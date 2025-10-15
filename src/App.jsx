@@ -17,7 +17,7 @@ import {
 import { 
     LayoutDashboard, Package, Users, Tag, Truck, Search, Plus, 
     Trash2, Edit, X, DollarSign, BrainCircuit, AlertCircle, Save, 
-    FileText, List, ShoppingCart, Building, LogOut, AtSign, KeyRound, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer, Upload, Code
+    FileText, List, ShoppingCart, Building, LogOut, AtSign, KeyRound, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer, Upload, Code, Image as ImageIcon
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
@@ -203,24 +203,42 @@ const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distr
 
 // --- 6. LÓGICA DE IA (GEMINI) ---
 // Nota: La clave API de Gemini DEBE residir en un proxy seguro (ej: Vercel Edge Function).
-const secureGeminiFetch = async (prompt) => {
+const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
     try {
-        const response = await fetch('/api/gemini-proxy', {
+        const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-pro';
+        const apiKey = ""; // API Key is provided by Canvas runtime.
+        const apiUrl = isImageGeneration 
+            ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
+            : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        const payload = isImageGeneration
+            ? { instances: { prompt: prompt }, parameters: { "sampleCount": 1 } }
+            : { contents: [{ parts: [{ text: prompt }] }] };
+
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt }),
+            body: JSON.stringify(payload),
         });
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || "Error en la respuesta del servidor de IA.");
+            throw new Error(errorData.error || `Error en el servidor de IA (${model}).`);
         }
         
         const data = await response.json();
-        return data.text;
+
+        if (isImageGeneration) {
+            const base64Data = data.predictions?.[0]?.bytesBase64Encoded;
+            if (!base64Data) throw new Error("La IA no generó una imagen válida.");
+            return `data:image/png;base64,${base64Data}`;
+        } else {
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar una respuesta de texto.";
+        }
+
     } catch (error) {
-        console.error("Error fetching Gemini:", error);
-        return "Hubo un error al conectar con el asistente de IA. Asegúrate de que el endpoint /api/gemini-proxy esté configurado correctamente.";
+        console.error("Error fetching Gemini/Imagen:", error);
+        return `Hubo un error al conectar con el asistente de IA. Asegúrate de que el endpoint /api/gemini-proxy esté configurado correctamente. Error: ${error.message}`;
     }
 };
 
@@ -1475,6 +1493,101 @@ const AIChat = () => {
     );
 };
 
+// NUEVO MÓDULO: Generador de Imágenes de Promoción (IA)
+const PromotionGenerator = () => {
+    const [prompt, setPrompt] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleGenerateImage = async (e) => {
+        e.preventDefault();
+        if (!prompt.trim()) return;
+
+        setLoading(true);
+        setError('');
+        setImageUrl('');
+
+        const stylePrompt = `, digital art, vibrant colors, social media ready, professional, wine distribution focus.`;
+        const fullPrompt = `${prompt}${stylePrompt}`;
+
+        try {
+            const url = await secureGeminiFetch(fullPrompt, true); // true para generación de imagen
+            setImageUrl(url);
+        } catch (e) {
+            setError('Error al generar la imagen. Intenta con una descripción más específica.');
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDownload = () => {
+        if (imageUrl) {
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = 'promo_distrifort_ia.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    const handleShare = () => {
+        if (!imageUrl) return;
+        
+        // Simulación: No se puede enviar una imagen base64 directamente por wa.me,
+        // pero podemos generar un mensaje pidiendo al cliente que vea la promo.
+        const shareMessage = encodeURIComponent("¡Nueva Promoción de DistriFort!\n\nMira esta imagen especial que creamos para ti. Descárgala desde el sitio web.");
+
+        // Usamos un número genérico como ejemplo de contacto
+        const whatsappLink = `https://wa.me/5491112345678?text=${shareMessage}`;
+        window.open(whatsappLink, '_blank');
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
+                <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2"><ImageIcon className="w-6 h-6"/><span>Generador de Promociones Visuales (IA)</span></h4>
+                <p className="text-sm text-gray-600">Describe la promoción que deseas generar para redes sociales (Ej: "Una botella de vino tinto Malbec en un paisaje nevado con el texto 50% OFF").</p>
+                
+                <form onSubmit={handleGenerateImage} className="flex space-x-3 pt-2">
+                    <Input 
+                        name="imagePrompt" 
+                        value={prompt} 
+                        onChange={e => setPrompt(e.target.value)} 
+                        placeholder="Describe tu imagen promocional..."
+                        className="flex-1"
+                        required
+                    />
+                    <Button type="submit" disabled={!prompt.trim() || loading} icon={ImageIcon}>
+                        {loading ? 'Creando...' : 'Generar Imagen'}
+                    </Button>
+                </form>
+
+                {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-xl">
+                <h4 className="text-lg font-semibold text-gray-700 mb-4">Resultado</h4>
+                {loading ? (
+                    <PageLoader text="Dibujando promoción..." />
+                ) : imageUrl ? (
+                    <div className="space-y-4">
+                        <img src={imageUrl} alt="Promoción Generada por IA" className="w-full max-w-lg mx-auto rounded-xl shadow-lg border" />
+                        <div className="flex justify-center space-x-4">
+                            <Button onClick={handleDownload} className="!bg-blue-500 hover:!bg-blue-600">Descargar PNG</Button>
+                            <Button onClick={handleShare} icon={Send} className="!bg-green-500 hover:!bg-green-600">Compartir (WhatsApp)</Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center text-gray-500 py-10">La imagen generada aparecerá aquí.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 
 const Tools = () => {
     const [subPage, setSubPage] = useState('calculator'); // 'calculator' o 'ai'
@@ -1497,11 +1610,19 @@ const Tools = () => {
                     >
                         Asistente IA
                     </Button>
+                    <Button 
+                        onClick={() => setSubPage('promo')} 
+                        className={subPage === 'promo' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
+                        icon={ImageIcon}
+                    >
+                        Promo (IA)
+                    </Button>
                 </div>
             </PageHeader>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {subPage === 'calculator' && <ProfitCalculator />}
                 {subPage === 'ai' && <AIChat />}
+                {subPage === 'promo' && <PromotionGenerator />}
             </div>
         </div>
     );
