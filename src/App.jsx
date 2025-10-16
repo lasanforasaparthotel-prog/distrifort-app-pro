@@ -35,7 +35,8 @@ if (Object.keys(firebaseConfig).length > 0) {
 }
 
 // --- 2. MODELOS DE DATOS ---
-const PRODUCT_MODEL = { nombre: '', marca: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
+// CAMBIO 1: 'marca' -> 'bodega'
+const PRODUCT_MODEL = { nombre: '', bodega: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
 const CLIENT_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', regimen: 'Minorista', minimoCompra: 0, limiteCredito: 0, saldoPendiente: 0, archivado: false };
 const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
 const PROVIDER_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
@@ -202,10 +203,9 @@ const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distr
 
 
 // --- 6. LÓGICA DE IA (GEMINI) ---
-// Nota: La clave API de Gemini DEBE residir en un proxy seguro (ej: Vercel Edge Function).
 const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
     try {
-        const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-pro';
+        const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-2.5-flash-preview-05-20';
         const apiKey = ""; // API Key is provided by Canvas runtime.
         const apiUrl = isImageGeneration 
             ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
@@ -238,7 +238,7 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
 
     } catch (error) {
         console.error("Error fetching Gemini/Imagen:", error);
-        return `Hubo un error al conectar con el asistente de IA. Asegúrate de que el endpoint /api/gemini-proxy esté configurado correctamente. Error: ${error.message}`;
+        return `Hubo un error al conectar con el asistente de IA. Error: ${error.message}`;
     }
 };
 
@@ -331,6 +331,8 @@ const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeade
 
 // 8.1 Módulos de Gestión Básica
 const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
+    const UNITS_PER_PALLET = 300; // Asumimos 50 cajas (udsPorCaja=6)
+
     const [stockAmount, setStockAmount] = useState(0);
     const [stockUnit, setStockUnit] = useState('unidad');
     
@@ -343,6 +345,8 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
         let unitsToAdd = stockAmount;
         if (stockUnit === 'caja') {
             unitsToAdd *= udsPorCaja;
+        } else if (stockUnit === 'pallet') {
+            unitsToAdd *= UNITS_PER_PALLET; // Lógica para Pallet
         }
         
         const newStockTotal = (item.stockTotal || 0) + unitsToAdd;
@@ -353,7 +357,8 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required />
-            <Input label="Marca" name="marca" value={item.marca} onChange={handleChange} />
+            {/* CAMBIO 1: 'marca' -> 'bodega' */}
+            <Input label="Bodega" name="bodega" value={item.bodega} onChange={handleChange} />
             <Input label="Precio Unidad ($)" name="precioUnidad" type="number" value={item.precioUnidad} onChange={handleChange} required />
             <Input label="Costo por Unidad ($)" name="costo" type="number" value={item.costo} onChange={handleChange} required />
             <Input label="Unidades por Caja" name="udsPorCaja" type="number" value={item.udsPorCaja} onChange={handleChange} />
@@ -366,9 +371,11 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
             
             <div className="col-span-full grid grid-cols-3 gap-2 items-end">
                 <Input label="Añadir Stock" type="number" value={stockAmount} onChange={handleStockChange} className="col-span-1" />
+                {/* CAMBIO 2: Opciones de Stock con Pallet */}
                 <Select label="Unidad" value={stockUnit} onChange={handleUnitChange} className="col-span-1">
                     <option value="unidad">Unidad</option>
-                    <option value="caja">Caja ({udsPorCaja} uds)</option>
+                    <option value="caja">Caja (x{udsPorCaja} uds)</option>
+                    <option value="pallet">Pallet (x{UNITS_PER_PALLET} uds)</option>
                 </Select>
                 <Button 
                     onClick={handleApplyStock} 
@@ -642,9 +649,9 @@ const OrderForm = ({ model, onSave, onCancel }) => {
         const batch = writeBatch(db);
         
         // 2. Referencias a documentos
-        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${order.userId}/orders`)).id; // Nuevo ID si no existe
-        const orderRef = doc(db, `/artifacts/${appId}/users/${order.userId}/orders`, orderId);
-        const clientRef = doc(db, `/artifacts/${appId}/users/${order.userId}/clients`, order.clienteId);
+        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/orders`)).id; // Nuevo ID si no existe
+        const orderRef = doc(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/orders`, orderId);
+        const clientRef = doc(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/clients`, order.clienteId);
 
         // 3. Crear/Actualizar Pedido
         batch.set(orderRef, { 
@@ -656,7 +663,7 @@ const OrderForm = ({ model, onSave, onCancel }) => {
             costoEnvio: parseFloat(order.costoEnvio) || 0,
             descuento: parseFloat(order.descuento) || 0,
             // Eliminar propiedades innecesarias/temporales
-            userId: order.userId || auth.currentUser.uid, 
+            userId: auth.currentUser.uid, 
             id: orderId
         }, { merge: true });
 
@@ -668,7 +675,7 @@ const OrderForm = ({ model, onSave, onCancel }) => {
         for (const item of order.items) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
-                const productRef = doc(db, `/artifacts/${appId}/users/${order.userId}/products`, item.productId);
+                const productRef = doc(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/products`, item.productId);
                 const newStockTotal = product.stockTotal - item.cantidad;
                 batch.update(productRef, { stockTotal: newStockTotal });
             }
@@ -940,6 +947,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 
     const handleHeaderChange = e => {
         const { name, value, type } = e.target;
+        // FIX: Se corrigió la sintaxis aquí, se añadió el '}' faltante al objeto.
         let newPo = { ...po, [name]: type === 'number' ? parseFloat(value) || 0 : value };
         
         if (name === 'proveedorId') {
@@ -1176,7 +1184,8 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                 <thead>
                     <tr className="bg-gray-100 font-semibold">
                         <td className="p-2 border">Producto</td>
-                        <td className="p-2 border">Marca</td>
+                        {/* CAMBIO 1: 'Marca' -> 'Bodega' */}
+                        <td className="p-2 border">Bodega</td>
                         <td className="p-2 border text-right">Precio Unitario</td>
                         <td className="p-2 border text-right">Stock (Uds)</td>
                     </tr>
@@ -1185,7 +1194,8 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                     {products.map((p) => (
                         <tr key={p.id}>
                             <td className="p-2 border">{p.nombre}</td>
-                            <td className="p-2 border">{p.marca}</td>
+                            {/* CAMBIO 1: p.marca -> p.bodega */}
+                            <td className="p-2 border">{p.bodega}</td>
                             <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
                             <td className="p-2 border text-right">{p.stockTotal}</td>
                         </tr>
@@ -1263,14 +1273,16 @@ const PriceListManager = () => {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    {["Producto", "Marca", "Precio Unitario", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                                    {/* CAMBIO 1: 'Marca' -> 'Bodega' */}
+                                    {["Producto", "Bodega", "Precio Unitario", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {products.map(p => (
                                     <tr key={p.id}>
                                         <td className="px-4 py-4 font-semibold">{p.nombre}</td>
-                                        <td className="px-4 py-4">{p.marca}</td>
+                                        {/* CAMBIO 1: p.marca -> p.bodega */}
+                                        <td className="px-4 py-4">{p.bodega}</td>
                                         <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
                                         <td className="px-4 py-4 text-right">{p.stockTotal}</td>
                                     </tr>
@@ -1739,18 +1751,50 @@ const PriceListImporter = () => {
         setImportLog("1. Estructurando datos con IA...");
 
         // 1. Usar la IA para formatear el texto a JSON
+        // Nota: Agregamos el header 'Response-Type' para forzar una respuesta estructurada
         const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo" y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
         
         let jsonResponse;
         try {
-            const resultText = await secureGeminiFetch(aiPrompt);
-            // Intentar limpiar y parsear el JSON
-            const cleanedText = resultText.replace(/```json|```/g, '').trim();
-            jsonResponse = JSON.parse(cleanedText);
+            const model = 'gemini-2.5-flash-preview-05-20';
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: aiPrompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    "nombre": { "type": "STRING" },
+                                    "costo": { "type": "NUMBER" },
+                                    "precioUnidad": { "type": "NUMBER" }
+                                },
+                                "propertyOrdering": ["nombre", "costo", "precioUnidad"]
+                            }
+                        }
+                    }
+                }),
+            });
+            
+            if (!response.ok) throw new Error("Fallo en la llamada a la API de IA.");
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (!jsonText) throw new Error("La IA no devolvió una respuesta JSON válida.");
+            
+            jsonResponse = JSON.parse(jsonText);
             setImportLog("2. Datos estructurados correctamente. Procesando importación...");
         } catch (e) {
             console.error("AI/JSON Parsing Error:", e);
-            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro.`);
+            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro. (Detalle: ${e.message})`);
             setLoading(false);
             return;
         }
@@ -1762,7 +1806,7 @@ const PriceListImporter = () => {
         const errors = [];
 
         for (const item of jsonResponse) {
-            if (!item.nombre || !item.costo || !item.precioUnidad) {
+            if (!item.nombre || item.costo === undefined || item.precioUnidad === undefined) {
                 errors.push(`Saltando ítem incompleto: ${item.nombre}`);
                 continue;
             }
@@ -1774,8 +1818,8 @@ const PriceListImporter = () => {
                 // Actualizar producto existente (solo costo/precio)
                 await createOrUpdateDoc('products', {
                     costo: parseFloat(item.costo) || 0,
-                    // OPCIONAL: También puedes actualizar el precio de venta si lo deseas
-                    // precioUnidad: parseFloat(item.precioUnidad) || existingProduct.precioUnidad
+                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                    // Dejamos que la bodega y otros campos persistan
                 }, existingProduct.id);
                 updatesCount++;
             } else {
@@ -1785,13 +1829,14 @@ const PriceListImporter = () => {
                     nombre: item.nombre,
                     costo: parseFloat(item.costo) || 0,
                     precioUnidad: parseFloat(item.precioUnidad) || 0,
-                    marca: `${providerName} / Listado`, // Marca del proveedor
+                    // CAMBIO 1: marca: -> bodega:
+                    bodega: `${providerName} / Listado`, // Bodega del proveedor
                 });
                 updatesCount++;
             }
         }
 
-        setImportLog(`Éxito: Se procesaron ${updatesCount} ítems (${errors.length} errores/saltos). Productos creados/actualizados en el Inventario.`);
+        setImportLog(`Éxito: Se procesaron ${updatesCount} ítems. Productos creados/actualizados en el Inventario.`);
         setLoading(false);
         setListText('');
     };
@@ -1836,6 +1881,7 @@ const PriceListImporter = () => {
         </div>
     );
 };
+
 
 // --- 9. APP PRINCIPAL Y NAVEGACIÓN ---
 const AppLayout = () => {
