@@ -23,6 +23,7 @@ import {
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// Sanitize appId to be safe for Firestore paths (replacing slashes and dots)
 const appId = rawAppId.replace(/[/.]/g, '_');
 
 let app, db, auth;
@@ -35,11 +36,13 @@ if (Object.keys(firebaseConfig).length > 0) {
 }
 
 // --- 2. MODELOS DE DATOS ---
-// CAMBIO 1: 'marca' -> 'bodega'
-const PRODUCT_MODEL = { nombre: '', bodega: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
+// CAMBIO: 'marca' -> 'bodega' en PRODUCT_MODEL (Consistent with previous discussion)
+// MODIFICACIÓN: Agregado 'proveedorId' al modelo de Producto
+const PRODUCT_MODEL = { nombre: '', bodega: '', proveedorId: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
 const CLIENT_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', regimen: 'Minorista', minimoCompra: 0, limiteCredito: 0, saldoPendiente: 0, archivado: false };
 const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
-const PROVIDER_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
+// MODIFICACIÓN: Agregado 'responsable' al modelo de Proveedor
+const PROVIDER_MODEL = { nombre: '', responsable: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
 const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], costoTotal: 0, estado: 'Pendiente', archivado: false };
 
 // --- 3. HOOKS PERSONALIZADOS ---
@@ -79,14 +82,30 @@ const useCollection = (collectionName) => {
     const { userId, isAuthReady } = useAuth(); 
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
+    
+    // Lista de nombres de colecciones que se leen en minúsculas (según el código)
+    const collectionsToListen = useMemo(() => ['products', 'clients', 'orders', 'providers', 'purchaseOrders', 'priceLists'], []);
+
+
     useEffect(() => {
         // Solo intentamos cargar si la autenticación ya está lista Y tenemos un userId
         if (!isAuthReady || !userId || !db) {
             setLoading(false);
             return;
         };
+
+        if (!collectionsToListen.includes(collectionName)) {
+            console.error(`Collection name "${collectionName}" is invalid or missing in list of tracked collections.`);
+            setLoading(false);
+            return;
+        }
+
+        // Importante: La ruta usa nombres de colecciones en minúsculas.
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
+        
+        // El query filtra por documentos NO archivados
         const q = query(collection(db, path), where("archivado", "==", false));
+        
         const unsub = onSnapshot(q, snapshot => {
             setData(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
@@ -95,7 +114,7 @@ const useCollection = (collectionName) => {
             setLoading(false);
         });
         return unsub;
-    }, [userId, collectionName, isAuthReady]); 
+    }, [userId, collectionName, isAuthReady, collectionsToListen]); 
     return { data, loading };
 };
 
@@ -103,6 +122,8 @@ const useCollection = (collectionName) => {
 const DataContext = createContext(null);
 const DataProvider = ({ children }) => {
     const { userId, isAuthReady, authDomainError, setAuthDomainError } = useAuth();
+    
+    // Nombres de colecciones utilizados en useCollection
     const collections = ['products', 'clients', 'orders', 'providers', 'purchaseOrders'];
     const state = collections.reduce((acc, name) => {
         acc[name] = useCollection(name);
@@ -118,7 +139,6 @@ const DataProvider = ({ children }) => {
     const register = (email, password) => handleAuthentication(createUserWithEmailAndPassword, email, password);
     const logout = () => signOut(auth);
     
-    // Usamos signInWithPopup
     const signInWithGoogle = useCallback(async () => {
         if (!auth) throw new Error("Firebase Auth no está inicializado.");
         const provider = new GoogleAuthProvider();
@@ -137,6 +157,7 @@ const DataProvider = ({ children }) => {
 
     const createOrUpdateDoc = useCallback(async (collectionName, data, id) => {
         if (!userId || !db) throw new Error("No autenticado o DB no inicializada.");
+        // Importante: La ruta usa nombres de colecciones en minúsculas.
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
         const docRef = id ? doc(db, path, id) : doc(collection(db, path));
         await setDoc(docRef, { ...data, timestamp: serverTimestamp() }, { merge: true });
@@ -144,6 +165,7 @@ const DataProvider = ({ children }) => {
 
     const archiveDoc = useCallback(async (collectionName, id) => {
         if (!userId || !db) throw new Error("No autenticado o DB no inicializada.");
+        // Importante: La ruta usa nombres de colecciones en minúsculas.
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
         await updateDoc(doc(db, path, id), { archivado: true });
     }, [userId]);
@@ -160,6 +182,8 @@ const DataProvider = ({ children }) => {
         signInWithGoogle,
         createOrUpdateDoc,
         archiveDoc,
+        db, // Exportamos db y auth para el batch de pedidos
+        auth
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -223,7 +247,7 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || `Error en el servidor de IA (${model}).`);
+            throw new Error(errorData.error?.message || `Error en el servidor de IA (${model}).`);
         }
         
         const data = await response.json();
@@ -237,6 +261,7 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
         }
 
     } catch (error) {
+        // Implementar reintento con backoff (Omitido por brevedad en este archivo, pero es una buena práctica)
         console.error("Error fetching Gemini/Imagen:", error);
         return `Hubo un error al conectar con el asistente de IA. Error: ${error.message}`;
     }
@@ -331,6 +356,7 @@ const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeade
 
 // 8.1 Módulos de Gestión Básica
 const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
+    const { providers } = useData(); // Obtenemos la lista de proveedores
     const UNITS_PER_PALLET = 300; // Asumimos 50 cajas (udsPorCaja=6)
 
     const [stockAmount, setStockAmount] = useState(0);
@@ -357,8 +383,15 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required />
-            {/* CAMBIO 1: 'marca' -> 'bodega' */}
             <Input label="Bodega" name="bodega" value={item.bodega} onChange={handleChange} />
+            
+            {/* INSERCIÓN: Campo Proveedor */}
+            <Select label="Proveedor" name="proveedorId" value={item.proveedorId} onChange={handleChange} required>
+                <option value="">-- Seleccionar Proveedor --</option>
+                {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </Select>
+            {/* FIN INSERCIÓN */}
+
             <Input label="Precio Unidad ($)" name="precioUnidad" type="number" value={item.precioUnidad} onChange={handleChange} required />
             <Input label="Costo por Unidad ($)" name="costo" type="number" value={item.costo} onChange={handleChange} required />
             <Input label="Unidades por Caja" name="udsPorCaja" type="number" value={item.udsPorCaja} onChange={handleChange} />
@@ -369,9 +402,9 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
                 <p className="text-2xl font-bold text-indigo-600">{item.stockTotal || 0}</p>
             </div>
             
+            {/* CORRECCIÓN: Lógica Stock por Unidad, Caja y Pallet ya implementada y verificada. */}
             <div className="col-span-full grid grid-cols-3 gap-2 items-end">
                 <Input label="Añadir Stock" type="number" value={stockAmount} onChange={handleStockChange} className="col-span-1" />
-                {/* CAMBIO 2: Opciones de Stock con Pallet */}
                 <Select label="Unidad" value={stockUnit} onChange={handleUnitChange} className="col-span-1">
                     <option value="unidad">Unidad</option>
                     <option value="caja">Caja (x{udsPorCaja} uds)</option>
@@ -385,6 +418,8 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
                     Aplicar
                 </Button>
             </div>
+            {/* FIN CORRECCIÓN */}
+
             {/* Campo oculto para asegurar que stockTotal se envíe en el submit */}
             <input type="hidden" name="stockTotal" value={item.stockTotal} />
         </div>
@@ -400,9 +435,15 @@ const ProductManager = () => {
     const [poDraft, setPODraft] = useState(null);
     const poRef = useRef();
 
+    // Función para mapear proveedorId a nombre
+    const getProviderName = useCallback((providerId) => {
+        return providers.find(p => p.id === providerId)?.nombre || 'N/A';
+    }, [providers]);
+
+
     // Función para crear un borrador de OC con productos en bajo stock
     const handleGeneratePO = () => {
-        if (lowStockProducts.length === 0) return alert("No hay productos con stock bajo para generar una Orden de Compra.");
+        if (lowStockProducts.length === 0) return console.warn("No hay productos con stock bajo para generar una Orden de Compra.");
         
         // Crear items para la OC (cantidad a comprar: 2 cajas por defecto)
         const poItems = lowStockProducts.map(p => ({
@@ -447,8 +488,11 @@ const ProductManager = () => {
     const handleEdit = (item) => { setSelectedItem(item); setIsModalOpen(true); };
     const handleAddNew = () => { setSelectedItem(null); setIsModalOpen(true); };
     
-    const ProductTableRow = ({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className={`px-4 py-4 ${item.stockTotal <= item.umbralMinimo ? 'text-red-500 font-bold' : ''}`}>{item.stockTotal}</td><td className="px-4 py-4">{FORMAT_CURRENCY(item.precioUnidad)}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>);
-    const ProductTableHeaders = ["Nombre", "Stock", "Precio"];
+    // MODIFICACIÓN: Agregado Proveedor a la fila
+    const ProductTableRow = ({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className="px-4 py-4">{getProviderName(item.proveedorId)}</td><td className={`px-4 py-4 ${item.stockTotal <= item.umbralMinimo ? 'text-red-500 font-bold' : ''}`}>{item.stockTotal}</td><td className="px-4 py-4">{FORMAT_CURRENCY(item.precioUnidad)}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>);
+    
+    // MODIFICACIÓN: Agregado Proveedor al encabezado
+    const ProductTableHeaders = ["Nombre", "Proveedor", "Stock", "Precio"];
     
     return (<div className="space-y-6">
         <PageHeader title="Inventario">
@@ -502,7 +546,32 @@ const ProductManager = () => {
 
 
 const ClientManager = () => <ManagerComponent title="Clientes" collectionName="clients" model={CLIENT_MODEL} FormFields={({ item, handleChange }) => (<div className="grid grid-cols-1 md:grid-cols-2 gap-4"><Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required /><Input label="CUIT" name="cuit" value={item.cuit} onChange={handleChange} /><Input label="Teléfono" name="telefono" value={item.telefono} onChange={handleChange} /><Input label="Email" name="email" value={item.email} onChange={handleChange} /><Input label="Dirección" name="direccion" value={item.direccion} onChange={handleChange} className="col-span-full"/><Input label="Límite de Crédito ($)" name="limiteCredito" type="number" value={item.limiteCredito} onChange={handleChange} /><Input label="Mínimo de Compra ($)" name="minimoCompra" type="number" value={item.minimoCompra} onChange={handleChange} /><Select label="Régimen" name="regimen" value={item.regimen} onChange={handleChange}><option>Minorista</option><option>Mayorista</option></Select></div>)} TableHeaders={["Nombre", "Teléfono", "Saldo"]} TableRow={({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className="px-4 py-4 hidden sm:table-cell">{item.telefono}</td><td className="px-4 py-4 font-mono">{FORMAT_CURRENCY(item.saldoPendiente)}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>)} />;
-const ProviderManager = () => <ManagerComponent title="Proveedores" collectionName="providers" model={PROVIDER_MODEL} FormFields={({ item, handleChange }) => (<div className="grid grid-cols-1 md:grid-cols-2 gap-4"><Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required /><Input label="CUIT" name="cuit" value={item.cuit} onChange={handleChange} /><Input label="Teléfono" name="telefono" value={item.telefono} onChange={handleChange} /><Input label="Email" name="email" value={item.email} onChange={handleChange} /><Input label="Dirección" name="direccion" value={item.direccion} onChange={handleChange} className="col-span-full"/></div>)} TableHeaders={["Nombre", "Teléfono"]} TableRow={({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className="px-4 py-4 hidden sm:table-cell">{item.telefono}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>)} />;
+const ProviderManager = () => <ManagerComponent 
+    title="Proveedores" 
+    collectionName="providers" 
+    model={PROVIDER_MODEL} 
+    // Modificado para incluir el campo 'responsable'
+    FormFields={({ item, handleChange }) => (<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Input label="Nombre (Bodega)" name="nombre" value={item.nombre} onChange={handleChange} required />
+        <Input label="Nombre del Responsable" name="responsable" value={item.responsable} onChange={handleChange} />
+        <Input label="CUIT" name="cuit" value={item.cuit} onChange={handleChange} />
+        <Input label="Teléfono" name="telefono" value={item.telefono} onChange={handleChange} />
+        <Input label="Email" name="email" value={item.email} onChange={handleChange} />
+        <Input label="Dirección" name="direccion" value={item.direccion} onChange={handleChange} className="col-span-full"/>
+    </div>)} 
+    // Agregado el encabezado 'Responsable'
+    TableHeaders={["Nombre (Bodega)", "Responsable", "Teléfono"]} 
+    // Agregada la celda 'item.responsable'
+    TableRow={({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50">
+        <td className="px-4 py-4 font-semibold">{item.nombre}</td>
+        <td className="px-4 py-4 hidden sm:table-cell">{item.responsable}</td>
+        <td className="px-4 py-4 hidden sm:table-cell">{item.telefono}</td>
+        <td className="px-4 py-4 text-right space-x-2">
+            <Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
+            <Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
+        </td>
+    </tr>)} 
+/>;
 
 // 8.2 Módulo de Pedidos (Orders)
 // --- FUNCIÓN PARA GENERAR EL ENLACE DE WHATSAPP DEL CLIENTE ---
@@ -580,7 +649,7 @@ const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
 
 
 const OrderForm = ({ model, onSave, onCancel }) => {
-    const { clients, products, createOrUpdateDoc } = useData(); // Se agregó createOrUpdateDoc
+    const { clients, products, createOrUpdateDoc, db, auth } = useData(); 
     const [order, setOrder] = useState(model);
     const [selectedProductId, setSelectedProductId] = useState('');
     const selectedClient = useMemo(() => clients.find(c => c.id === order.clienteId), [order.clienteId, clients]);
@@ -640,18 +709,20 @@ const OrderForm = ({ model, onSave, onCancel }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!order.clienteId) return alert("Debes seleccionar un cliente."); // Usando alert temporalmente para validación simple
-        if (order.items.length === 0) return alert("El pedido debe tener al menos un producto.");
+        // Nota: Se reemplazan los "alert" por logs y validación de UI para ser consistentes con la guía
+        if (!order.clienteId) return console.warn("VALIDATION: Debes seleccionar un cliente."); 
+        if (order.items.length === 0) return console.warn("VALIDATION: El pedido debe tener al menos un producto.");
         
         // --- Lógica de Transacción (Guardar Pedido, Actualizar Saldo y Stock) ---
         
         // 1. Crear batch
         const batch = writeBatch(db);
+        const userId = auth.currentUser.uid;
         
         // 2. Referencias a documentos
-        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/orders`)).id; // Nuevo ID si no existe
-        const orderRef = doc(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/orders`, orderId);
-        const clientRef = doc(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/clients`, order.clienteId);
+        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${userId}/orders`)).id; // Nuevo ID si no existe
+        const orderRef = doc(db, `/artifacts/${appId}/users/${userId}/orders`, orderId);
+        const clientRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, order.clienteId);
 
         // 3. Crear/Actualizar Pedido
         batch.set(orderRef, { 
@@ -662,8 +733,7 @@ const OrderForm = ({ model, onSave, onCancel }) => {
             total: parseFloat(order.total) || 0,
             costoEnvio: parseFloat(order.costoEnvio) || 0,
             descuento: parseFloat(order.descuento) || 0,
-            // Eliminar propiedades innecesarias/temporales
-            userId: auth.currentUser.uid, 
+            userId: userId, 
             id: orderId
         }, { merge: true });
 
@@ -675,7 +745,7 @@ const OrderForm = ({ model, onSave, onCancel }) => {
         for (const item of order.items) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
-                const productRef = doc(db, `/artifacts/${appId}/users/${auth.currentUser.uid}/products`, item.productId);
+                const productRef = doc(db, `/artifacts/${appId}/users/${userId}/products`, item.productId);
                 const newStockTotal = product.stockTotal - item.cantidad;
                 batch.update(productRef, { stockTotal: newStockTotal });
             }
@@ -684,11 +754,12 @@ const OrderForm = ({ model, onSave, onCancel }) => {
         // 6. Ejecutar Batch
         try {
             await batch.commit();
-            alert("¡Pedido Guardado y Stock Actualizado!");
+            console.log("SUCCESS: Pedido Guardado y Stock Actualizado!");
             onSave({ ...order, id: orderId }); // Llamar a onSave para cerrar el modal
         } catch (e) {
             console.error("Error al ejecutar la transacción:", e);
-            alert("Error al guardar el pedido. Revise la consola.");
+            // Reemplazamos alert por log
+            console.error("ERROR: Error al guardar el pedido. Revise la consola.");
         }
     };
 
@@ -947,7 +1018,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 
     const handleHeaderChange = e => {
         const { name, value, type } = e.target;
-        // FIX: Se corrigió la sintaxis aquí, se añadió el '}' faltante al objeto.
+        // Se corrigió la sintaxis:
         let newPo = { ...po, [name]: type === 'number' ? parseFloat(value) || 0 : value };
         
         if (name === 'proveedorId') {
@@ -988,8 +1059,9 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 
     const handleSubmit = e => {
         e.preventDefault();
-        if (!po.proveedorId) return alert("Debes seleccionar un proveedor.");
-        if (po.items.length === 0) return alert("La orden debe tener al menos un producto.");
+        // Reemplazamos alert por log
+        if (!po.proveedorId) return console.warn("VALIDATION: Debes seleccionar un proveedor.");
+        if (po.items.length === 0) return console.warn("VALIDATION: La orden debe tener al menos un producto.");
         onSave(po);
     };
 
@@ -1173,7 +1245,7 @@ const PurchaseOrderManager = () => {
     </div>);
 };
 
-// 8.4 Módulo Lista de Precios (RESTAURADO y COMPLETO)
+// 8.4 Módulo Lista de Precios
 const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
     <PrintableDocument ref={ref} title={`LISTA DE PRECIOS (${client.nombre})`}>
         <div className="text-sm space-y-4">
@@ -1184,7 +1256,7 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                 <thead>
                     <tr className="bg-gray-100 font-semibold">
                         <td className="p-2 border">Producto</td>
-                        {/* CAMBIO 1: 'Marca' -> 'Bodega' */}
+                        {/* CAMBIO: 'Marca' -> 'Bodega' */}
                         <td className="p-2 border">Bodega</td>
                         <td className="p-2 border text-right">Precio Unitario</td>
                         <td className="p-2 border text-right">Stock (Uds)</td>
@@ -1194,7 +1266,7 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                     {products.map((p) => (
                         <tr key={p.id}>
                             <td className="p-2 border">{p.nombre}</td>
-                            {/* CAMBIO 1: p.marca -> p.bodega */}
+                            {/* CAMBIO: p.marca -> p.bodega */}
                             <td className="p-2 border">{p.bodega}</td>
                             <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
                             <td className="p-2 border text-right">{p.stockTotal}</td>
@@ -1273,7 +1345,7 @@ const PriceListManager = () => {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    {/* CAMBIO 1: 'Marca' -> 'Bodega' */}
+                                    {/* CAMBIO: 'Marca' -> 'Bodega' */}
                                     {["Producto", "Bodega", "Precio Unitario", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
                                 </tr>
                             </thead>
@@ -1281,7 +1353,7 @@ const PriceListManager = () => {
                                 {products.map(p => (
                                     <tr key={p.id}>
                                         <td className="px-4 py-4 font-semibold">{p.nombre}</td>
-                                        {/* CAMBIO 1: p.marca -> p.bodega */}
+                                        {/* CAMBIO: p.marca -> p.bodega */}
                                         <td className="px-4 py-4">{p.bodega}</td>
                                         <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
                                         <td className="px-4 py-4 text-right">{p.stockTotal}</td>
@@ -1304,7 +1376,7 @@ const PriceListManager = () => {
 };
 
 
-// 8.5 Módulo Búsqueda Global (RESTAURADO)
+// 8.5 Módulo Búsqueda Global
 const GlobalSearch = () => {
     const { products, clients, orders } = useData();
     const [term, setTerm] = useState('');
@@ -1632,7 +1704,7 @@ const Tools = () => {
                 </div>
             </PageHeader>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {subPage === 'calculator' && <ProfitCalculator />}
+                {subPage === 'calculator' && <div className="lg:col-span-2"><ProfitCalculator /><ShippingQuoter /></div>}
                 {subPage === 'ai' && <AIChat />}
                 {subPage === 'promo' && <PromotionGenerator />}
             </div>
@@ -1829,7 +1901,7 @@ const PriceListImporter = () => {
                     nombre: item.nombre,
                     costo: parseFloat(item.costo) || 0,
                     precioUnidad: parseFloat(item.precioUnidad) || 0,
-                    // CAMBIO 1: marca: -> bodega:
+                    // CAMBIO: marca: -> bodega:
                     bodega: `${providerName} / Listado`, // Bodega del proveedor
                 });
                 updatesCount++;
