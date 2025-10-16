@@ -1,23 +1,26 @@
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getFirestore } from "firebase/firestore"; // Importación de Firestore
+// src/firebaseConfig.js
+// Configuración e inicialización central de Firebase para DistriFort
 
-// Las claves deben ser cargadas desde variables de entorno en producción (Vercel)
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+
+// 🔐 Configuración del proyecto Firebase
+// (versión corregida con el bucket correcto ".appspot.com")
 const firebaseConfig = {
-  // NOTA: Reemplaza estos valores por process.env.NEXT_PUBLIC_... en tu código fuente
-  apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI", 
+  apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI",
   authDomain: "distrifort.firebaseapp.com",
   projectId: "distrifort",
-  storageBucket: "distrifort.firebasestorage.app",
+  storageBucket: "distrifort.appspot.com", // ✅ corregido: .appspot.com
   messagingSenderId: "456742367607",
   appId: "1:456742367607:web:25341e7e3126fd7c04f172",
   measurementId: "G-F62DMRC8NZ"
 };
 
-// Inicializar Firebase
+// 🚀 Inicializar Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app); // Inicializar Firestore
 
-// Exportar la instancia de la Base de Datos
+// 💾 Inicializar Firestore (Base de Datos)
+const db = getFirestore(app);
+
+// 📤 Exportar la instancia para usar en toda la app
 export { db };
