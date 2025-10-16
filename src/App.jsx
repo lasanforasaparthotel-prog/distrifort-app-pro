@@ -21,9 +21,45 @@ import {
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-// Sanitize appId to be safe for Firestore paths (replacing slashes and dots)
+
+// 1.1 Definición de variables de entorno (Canvas / Vercel/Vite)
+const __RAW_CONFIG__ = typeof __firebase_config !== 'undefined' ? __firebase_config : 
+                       (typeof VITE_FIREBASE_CONFIG !== 'undefined' ? VITE_FIREBASE_CONFIG : null);
+
+const __RAW_APP_ID__ = typeof __app_id !== 'undefined' ? __app_id : 
+                       (typeof VITE_APP_ID !== 'undefined' ? VITE_APP_ID : 'default-app-id');
+
+let firebaseConfig = {};
+let rawAppId = __RAW_APP_ID__;
+
+
+// 1.2 LÓGICA DE RECUPERACIÓN DE CONFIGURACIÓN
+if (__RAW_CONFIG__) {
+    // Intentar 1: Parsear el JSON directo (esperando el formato '{"key":"value",...}')
+    try {
+        // Primero, limpiamos posibles comillas simples o dobles que Vercel/Vite inyecta en el string
+        let cleanedConfig = __RAW_CONFIG__.trim();
+        if (cleanedConfig.startsWith("'") && cleanedConfig.endsWith("'")) {
+            cleanedConfig = cleanedConfig.slice(1, -1);
+        }
+        if (cleanedConfig.startsWith('"') && cleanedConfig.endsWith('"')) {
+            cleanedConfig = cleanedConfig.slice(1, -1);
+        }
+        
+        firebaseConfig = JSON.parse(cleanedConfig);
+        console.log("INFO: Configuración de Firebase cargada con éxito (Método JSON estricto).");
+
+    } catch (e) {
+        // Fallback: Si el JSON es inválido, puede ser que el usuario haya subido las claves individuales
+        // Sin embargo, Vercel no expone todas las claves fácilmente.
+        // Si no se pudo parsear, se mantendrá firebaseConfig como objeto vacío.
+        console.error("ERROR: No se pudo parsear VITE_FIREBASE_CONFIG (JSON inválido).", e);
+        console.log("ADVERTENCIA: Aplicación arrancando sin conexión a Firebase.");
+    }
+}
+
+
+// 1.3 Inicialización y AppId
 const appId = rawAppId.replace(/[/.]/g, '_');
 
 let app, db, auth;
@@ -32,16 +68,14 @@ if (Object.keys(firebaseConfig).length > 0) {
     db = getFirestore(app);
     auth = getAuth(app);
 } else {
-    console.error("Configuración de Firebase no encontrada.");
+    // Este error se mostrará si VITE_FIREBASE_CONFIG no pudo ser leído
+    console.error("Error: La configuración de Firebase no se pudo cargar. La aplicación funcionará sin conexión a la base de datos.");
 }
 
 // --- 2. MODELOS DE DATOS ---
-// CAMBIO: 'marca' -> 'bodega' en PRODUCT_MODEL (Consistent with previous discussion)
-// MODIFICACIÓN: Agregado 'proveedorId' al modelo de Producto
 const PRODUCT_MODEL = { nombre: '', bodega: '', proveedorId: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
 const CLIENT_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', regimen: 'Minorista', minimoCompra: 0, limiteCredito: 0, saldoPendiente: 0, archivado: false };
 const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
-// MODIFICACIÓN: Agregado 'responsable' al modelo de Proveedor
 const PROVIDER_MODEL = { nombre: '', responsable: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
 const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], costoTotal: 0, estado: 'Pendiente', archivado: false };
 
@@ -418,8 +452,6 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
                     Aplicar
                 </Button>
             </div>
-            {/* FIN CORRECCIÓN */}
-
             {/* Campo oculto para asegurar que stockTotal se envíe en el submit */}
             <input type="hidden" name="stockTotal" value={item.stockTotal} />
         </div>
@@ -496,20 +528,15 @@ const ProductManager = () => {
     
     return (<div className="space-y-6">
         <PageHeader title="Inventario">
-            <div className="flex space-x-2">
-                {lowStockProducts.length > 0 && (
-                     <Button 
-                        onClick={handleGeneratePO} 
-                        icon={Truck} 
-                        className="!bg-red-500 hover:!bg-red-600 animate-pulse"
-                        title={`Generar OC con ${lowStockProducts.length} productos bajos`}
-                    >
-                        Generar OC ({lowStockProducts.length})
-                    </Button>
-                )}
-                <Button onClick={handleAddNew} icon={Plus}>Añadir Producto</Button>
-            </div>
+            <Button onClick={handleAddNew} icon={Plus}>Añadir Producto</Button>
         </PageHeader>
+        {lowStockProducts.length > 0 && (
+             <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                 <p className="font-bold">Alerta de Stock</p>
+                 <p>Tienes {lowStockProducts.length} productos bajo el umbral mínimo.</p>
+                 <Button onClick={handleGeneratePO} className="mt-2 !py-1 !px-2 !text-sm !bg-red-500 hover:!bg-red-600" icon={Truck}>Generar OC</Button>
+             </div>
+        )}
         {isModalOpen && <Modal title={(selectedItem ? "Editar " : "Nuevo ") + "Producto"} onClose={() => setIsModalOpen(false)}>
             <FormComponent model={selectedItem || PRODUCT_MODEL} onSave={handleSave} onCancel={() => setIsModalOpen(false)}>
                 <ProductFormFields onStockUpdate={handleStockUpdate} />
@@ -568,7 +595,7 @@ const ProviderManager = () => <ManagerComponent
         <td className="px-4 py-4 hidden sm:table-cell">{item.telefono}</td>
         <td className="px-4 py-4 text-right space-x-2">
             <Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
-            <Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
+            <Button onClick={() => archiveDoc('providers', item.id)} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
         </td>
     </tr>)} 
 />;
@@ -934,7 +961,7 @@ const OrderManager = () => {
 
 // 8.3 Módulo de Órdenes de Compra (Purchase Orders)
 
-// --- FUNCIÓN PARA GENERAR EL MENSAJE DE ORDEN DE COMPRA ---
+// --- FUNCIÓN PARA GENERAR EL ENLACE DE WHATSAPP DEL PROVEEDOR ---
 const generatePurchaseOrderLink = (provider, po) => {
     if (!provider) return { whatsapp: null, email: null };
 
@@ -1378,7 +1405,7 @@ const PriceListManager = () => {
 
 // 8.5 Módulo Búsqueda Global
 const GlobalSearch = () => {
-    const { products, clients, orders } = useData();
+    const { products, orders, clients } = useData();
     const [term, setTerm] = useState('');
     const results = useMemo(() => {
         if (!term) return {};
@@ -1577,7 +1604,162 @@ const AIChat = () => {
     );
 };
 
-// NUEVO MÓDULO: Generador de Imágenes de Promoción (IA)
+// 8.8 Módulo Importador de Listas de Precios (NUEVO)
+const PriceListImporter = () => {
+    const { providers, products, createOrUpdateDoc } = useData();
+    const [providerId, setProviderId] = useState('');
+    const [listText, setListText] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [importLog, setImportLog] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!providerId) {
+            setImportLog("Error: Debes seleccionar un proveedor.");
+            return;
+        }
+        if (!listText.trim()) {
+            setImportLog("Error: El campo de texto de la lista de precios está vacío.");
+            return;
+        }
+
+        setLoading(true);
+        setImportLog("1. Estructurando datos con IA...");
+
+        // 1. Usar la IA para formatear el texto a JSON
+        // Nota: Agregamos el header 'Response-Type' para forzar una respuesta estructurada
+        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo", y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+        
+        let jsonResponse;
+        try {
+            const model = 'gemini-2.5-flash-preview-05-20';
+            const apiKey = ""; // Canvas runtime or Vercel ENV
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: aiPrompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    "nombre": { "type": "STRING" },
+                                    "costo": { "type": "NUMBER" },
+                                    "precioUnidad": { "type": "NUMBER" }
+                                },
+                                "propertyOrdering": ["nombre", "costo", "precioUnidad"]
+                            }
+                        }
+                    }
+                }),
+            });
+            
+            if (!response.ok) throw new Error("Fallo en la llamada a la API de IA.");
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (!jsonText) throw new Error("La IA no devolvió una respuesta JSON válida.");
+            
+            jsonResponse = JSON.parse(jsonText);
+            setImportLog("2. Datos estructurados correctamente. Procesando importación...");
+        } catch (e) {
+            console.error("AI/JSON Parsing Error:", e);
+            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro. (Detalle: ${e.message})`);
+            setLoading(false);
+            return;
+        }
+
+        // 2. Procesar e importar los datos
+        const providerName = providers.find(p => p.id === providerId)?.nombre || 'Desconocido';
+        let updatesCount = 0;
+        
+        const errors = [];
+
+        for (const item of jsonResponse) {
+            if (!item.nombre || item.costo === undefined || item.precioUnidad === undefined) {
+                errors.push(`Saltando ítem incompleto: ${item.nombre}`);
+                continue;
+            }
+            
+            // Buscar si el producto ya existe por nombre
+            const existingProduct = products.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim());
+
+            if (existingProduct) {
+                // Actualizar producto existente (solo costo/precio)
+                await createOrUpdateDoc('products', {
+                    costo: parseFloat(item.costo) || 0,
+                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                    // Dejamos que la bodega y otros campos persistan
+                }, existingProduct.id);
+                updatesCount++;
+            } else {
+                // Crear nuevo producto (con valores del modelo por defecto)
+                await createOrUpdateDoc('products', {
+                    ...PRODUCT_MODEL,
+                    nombre: item.nombre,
+                    costo: parseFloat(item.costo) || 0,
+                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                    proveedorId: providerId, // Vincula el nuevo producto al proveedor
+                    bodega: `${providerName} / Listado`, // Bodega del proveedor
+                });
+                updatesCount++;
+            }
+        }
+
+        setImportLog(`Éxito: Se procesaron ${updatesCount} ítems. Productos creados/actualizados en el Inventario.`);
+        setLoading(false);
+        setListText('');
+    };
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Importador de Listas de Precios (IA)">
+                <p className="text-sm text-gray-500">Utiliza la IA para convertir texto plano de listas de precios en datos de productos.</p>
+            </PageHeader>
+            
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <Select label="Proveedor de la Lista" name="providerId" value={providerId} onChange={e => setProviderId(e.target.value)} required>
+                        <option value="">-- Seleccione el Proveedor --</option>
+                        {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </Select>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pegar Contenido de la Lista (PDF/Excel)</label>
+                        <textarea 
+                            value={listText}
+                            onChange={e => setListText(e.target.value)}
+                            rows="10"
+                            placeholder="Copia y pega el texto de tu lista de precios aquí. Asegúrate de incluir el nombre del producto y su costo/precio."
+                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                            required
+                        />
+                    </div>
+                    
+                    <Button type="submit" icon={Upload} disabled={loading || !providerId || !listText.trim()}>
+                        {loading ? 'Procesando con IA...' : 'Importar Productos y Precios'}
+                    </Button>
+                </form>
+
+                {importLog && (
+                    <div className={`p-4 rounded-lg text-sm ${importLog.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        <h4 className="font-bold">Registro de Importación:</h4>
+                        <p>{importLog}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// 8.9 Módulo Generador de Imágenes de Promoción (IA)
 const PromotionGenerator = () => {
     const [prompt, setPrompt] = useState('');
     const [imageUrl, setImageUrl] = useState('');
@@ -1704,7 +1886,7 @@ const Tools = () => {
                 </div>
             </PageHeader>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {subPage === 'calculator' && <div className="lg:col-span-2"><ProfitCalculator /><ShippingQuoter /></div>}
+                {subPage === 'calculator' && <ProfitCalculator />}
                 {subPage === 'ai' && <AIChat />}
                 {subPage === 'promo' && <PromotionGenerator />}
             </div>
@@ -1716,7 +1898,7 @@ const Dashboard = ({ setCurrentPage }) => {
     const { products, orders, clients, purchaseOrders } = useData();
 
     // 1. Métricas de Inventario
-    const lowStockCount = useMemo(() => products.filter(p => p.stockTotal <= p.umbralMinimo).length, [products]);
+    const lowStockCount = useMemo(() => products.filter(p => p.stockTotal <= p.umbralMinimo), [products]).length;
     const totalInventoryValue = useMemo(() => 
         products.reduce((sum, p) => sum + (p.costo * p.stockTotal), 0), 
         [products]
@@ -1739,7 +1921,6 @@ const Dashboard = ({ setCurrentPage }) => {
     );
     
     // 3. Métricas de Margen (simulado)
-    // Para un margen más realista, necesitamos el costo total de los productos vendidos.
     const productCostMap = useMemo(() => new Map(products.map(p => [p.id, p.costo])), [products]);
     
     const grossProfitTotal = useMemo(() => {
@@ -1785,7 +1966,7 @@ const Dashboard = ({ setCurrentPage }) => {
                         value={card.value} 
                         icon={card.icon} 
                         color={card.color} 
-                        onClick={() => setCurrentPage(card.page)}
+                        onClick={() => setCurrentPage(card.page)} // CORRECCIÓN: Propagación del onClick
                     />
                 ))}
             </div>
@@ -1799,161 +1980,6 @@ const Dashboard = ({ setCurrentPage }) => {
         </div>
     );
 };
-
-// 8.8 Módulo Importador de Listas de Precios (NUEVO)
-const PriceListImporter = () => {
-    const { providers, products, createOrUpdateDoc } = useData();
-    const [providerId, setProviderId] = useState('');
-    const [listText, setListText] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [importLog, setImportLog] = useState('');
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!providerId) {
-            setImportLog("Error: Debes seleccionar un proveedor.");
-            return;
-        }
-        if (!listText.trim()) {
-            setImportLog("Error: El campo de texto de la lista de precios está vacío.");
-            return;
-        }
-
-        setLoading(true);
-        setImportLog("1. Estructurando datos con IA...");
-
-        // 1. Usar la IA para formatear el texto a JSON
-        // Nota: Agregamos el header 'Response-Type' para forzar una respuesta estructurada
-        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo" y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
-        
-        let jsonResponse;
-        try {
-            const model = 'gemini-2.5-flash-preview-05-20';
-            const apiKey = ""; 
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: aiPrompt }] }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "ARRAY",
-                            items: {
-                                type: "OBJECT",
-                                properties: {
-                                    "nombre": { "type": "STRING" },
-                                    "costo": { "type": "NUMBER" },
-                                    "precioUnidad": { "type": "NUMBER" }
-                                },
-                                "propertyOrdering": ["nombre", "costo", "precioUnidad"]
-                            }
-                        }
-                    }
-                }),
-            });
-            
-            if (!response.ok) throw new Error("Fallo en la llamada a la API de IA.");
-
-            const result = await response.json();
-            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-            
-            if (!jsonText) throw new Error("La IA no devolvió una respuesta JSON válida.");
-            
-            jsonResponse = JSON.parse(jsonText);
-            setImportLog("2. Datos estructurados correctamente. Procesando importación...");
-        } catch (e) {
-            console.error("AI/JSON Parsing Error:", e);
-            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro. (Detalle: ${e.message})`);
-            setLoading(false);
-            return;
-        }
-
-        // 2. Procesar e importar los datos
-        const providerName = providers.find(p => p.id === providerId)?.nombre || 'Desconocido';
-        let updatesCount = 0;
-        
-        const errors = [];
-
-        for (const item of jsonResponse) {
-            if (!item.nombre || item.costo === undefined || item.precioUnidad === undefined) {
-                errors.push(`Saltando ítem incompleto: ${item.nombre}`);
-                continue;
-            }
-            
-            // Buscar si el producto ya existe por nombre
-            const existingProduct = products.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim());
-
-            if (existingProduct) {
-                // Actualizar producto existente (solo costo/precio)
-                await createOrUpdateDoc('products', {
-                    costo: parseFloat(item.costo) || 0,
-                    precioUnidad: parseFloat(item.precioUnidad) || 0,
-                    // Dejamos que la bodega y otros campos persistan
-                }, existingProduct.id);
-                updatesCount++;
-            } else {
-                // Crear nuevo producto (con valores del modelo por defecto)
-                await createOrUpdateDoc('products', {
-                    ...PRODUCT_MODEL,
-                    nombre: item.nombre,
-                    costo: parseFloat(item.costo) || 0,
-                    precioUnidad: parseFloat(item.precioUnidad) || 0,
-                    // CAMBIO: marca: -> bodega:
-                    bodega: `${providerName} / Listado`, // Bodega del proveedor
-                });
-                updatesCount++;
-            }
-        }
-
-        setImportLog(`Éxito: Se procesaron ${updatesCount} ítems. Productos creados/actualizados en el Inventario.`);
-        setLoading(false);
-        setListText('');
-    };
-
-    return (
-        <div className="space-y-6">
-            <PageHeader title="Importador de Listas de Precios (IA)">
-                <p className="text-sm text-gray-500">Utiliza la IA para convertir texto plano de listas de precios en datos de productos.</p>
-            </PageHeader>
-            
-            <div className="bg-white p-6 rounded-xl shadow-md space-y-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <Select label="Proveedor de la Lista" name="providerId" value={providerId} onChange={e => setProviderId(e.target.value)} required>
-                        <option value="">-- Seleccione el Proveedor --</option>
-                        {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </Select>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Pegar Contenido de la Lista (PDF/Excel)</label>
-                        <textarea 
-                            value={listText}
-                            onChange={e => setListText(e.target.value)}
-                            rows="10"
-                            placeholder="Copia y pega el texto de tu lista de precios aquí. Asegúrate de incluir el nombre del producto y su costo/precio."
-                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                            required
-                        />
-                    </div>
-                    
-                    <Button type="submit" icon={Upload} disabled={loading || !providerId || !listText.trim()}>
-                        {loading ? 'Procesando con IA...' : 'Importar Productos y Precios'}
-                    </Button>
-                </form>
-
-                {importLog && (
-                    <div className={`p-4 rounded-lg text-sm ${importLog.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                        <h4 className="font-bold">Registro de Importación:</h4>
-                        <p>{importLog}</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
 
 // --- 9. APP PRINCIPAL Y NAVEGACIÓN ---
 const AppLayout = () => {
@@ -1977,7 +2003,9 @@ const AppLayout = () => {
     };
 
     const renderPage = () => {
-        if (!db) return <div className="text-center text-red-500">Error: La configuración de Firebase no se pudo cargar.</div>
+        // CORRECCIÓN: Muestra el error si Firebase no pudo inicializarse.
+        if (Object.keys(firebaseConfig).length === 0) return <div className="p-8 text-center bg-red-100 border border-red-400 rounded-xl text-red-800 font-semibold">Error: La configuración de Firebase no se pudo cargar. Verifique las variables de entorno (VITE_FIREBASE_CONFIG) y el formato JSON.</div>;
+        
         switch (currentPage) {
             case 'Dashboard': return <Dashboard setCurrentPage={handleSetCurrentPage} />; // Pasa la función de navegación
             case 'Inventario': return <ProductManager />;
@@ -2034,6 +2062,11 @@ export default function DistriFortApp() {
 const AppController = () => {
     const { userId, isAuthReady, loading } = useData();
     
+    // Si la configuración de Firebase falló al inicio, mostramos el error de la AppLayout
+    if (Object.keys(firebaseConfig).length === 0) {
+        return <AppLayout />;
+    }
+
     if (!isAuthReady) {
         return <PageLoader text="Inicializando..." />;
     }
