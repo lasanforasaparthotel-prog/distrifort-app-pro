@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { 
     getFirestore, collection, doc, onSnapshot, setDoc, 
-    serverTimestamp, writeBatch, updateDoc, query, where
+    serverTimestamp, writeBatch, updateDoc, query, where, addDoc
 } from 'firebase/firestore';
 import { 
     LayoutDashboard, Package, Users, Tag, Truck, Search, Plus, 
@@ -21,45 +21,26 @@ import {
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
-
-// 1.1 Definición de variables de entorno (Canvas / Vercel/Vite)
-const __RAW_CONFIG__ = typeof __firebase_config !== 'undefined' ? __firebase_config : 
-                       (typeof VITE_FIREBASE_CONFIG !== 'undefined' ? VITE_FIREBASE_CONFIG : null);
-
-const __RAW_APP_ID__ = typeof __app_id !== 'undefined' ? __app_id : 
-                       (typeof VITE_APP_ID !== 'undefined' ? VITE_APP_ID : 'default-app-id');
+// La aplicación ahora busca VITE_FIREBASE_JSON_ONLY para evitar errores de formato JSON.
+const rawJsonConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : 
+                      (typeof VITE_FIREBASE_JSON_ONLY !== 'undefined' ? VITE_FIREBASE_JSON_ONLY : null);
 
 let firebaseConfig = {};
-let rawAppId = __RAW_APP_ID__;
+let rawAppId = 'default-app-id';
 
-
-// 1.2 LÓGICA DE RECUPERACIÓN DE CONFIGURACIÓN
-if (__RAW_CONFIG__) {
-    // Intentar 1: Parsear el JSON directo (esperando el formato '{"key":"value",...}')
-    try {
-        // Primero, limpiamos posibles comillas simples o dobles que Vercel/Vite inyecta en el string
-        let cleanedConfig = __RAW_CONFIG__.trim();
-        if (cleanedConfig.startsWith("'") && cleanedConfig.endsWith("'")) {
-            cleanedConfig = cleanedConfig.slice(1, -1);
-        }
-        if (cleanedConfig.startsWith('"') && cleanedConfig.endsWith('"')) {
-            cleanedConfig = cleanedConfig.slice(1, -1);
-        }
-        
-        firebaseConfig = JSON.parse(cleanedConfig);
-        console.log("INFO: Configuración de Firebase cargada con éxito (Método JSON estricto).");
-
-    } catch (e) {
-        // Fallback: Si el JSON es inválido, puede ser que el usuario haya subido las claves individuales
-        // Sin embargo, Vercel no expone todas las claves fácilmente.
-        // Si no se pudo parsear, se mantendrá firebaseConfig como objeto vacío.
-        console.error("ERROR: No se pudo parsear VITE_FIREBASE_CONFIG (JSON inválido).", e);
-        console.log("ADVERTENCIA: Aplicación arrancando sin conexión a Firebase.");
+try {
+    if (rawJsonConfig) {
+        // Parsear el JSON puro
+        firebaseConfig = JSON.parse(rawJsonConfig);
+        // Extraer el appId directamente del objeto, ya que no lo recibimos por separado
+        rawAppId = firebaseConfig.appId || 'default-app-id'; 
+    } else {
+        console.error("Error: La configuración de Firebase no se pudo cargar. Verifique las variables de entorno (VITE_FIREBASE_JSON_ONLY) y el formato JSON.");
     }
+} catch (e) {
+    console.error(`ERROR CRÍTICO: Fallo al parsear el JSON de Firebase. Revise el formato en Vercel. Detalle: ${e.message}`);
 }
 
-
-// 1.3 Inicialización y AppId
 const appId = rawAppId.replace(/[/.]/g, '_');
 
 let app, db, auth;
@@ -67,10 +48,8 @@ if (Object.keys(firebaseConfig).length > 0) {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
     auth = getAuth(app);
-} else {
-    // Este error se mostrará si VITE_FIREBASE_CONFIG no pudo ser leído
-    console.error("Error: La configuración de Firebase no se pudo cargar. La aplicación funcionará sin conexión a la base de datos.");
-}
+} 
+// FIN CONFIGURACIÓN FIREBASE
 
 // --- 2. MODELOS DE DATOS ---
 const PRODUCT_MODEL = { nombre: '', bodega: '', proveedorId: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
@@ -93,17 +72,14 @@ const useAuth = () => {
         
         const unsub = onAuthStateChanged(auth, user => {
             if (user) {
-                // Si hay un usuario (email/Google/anónimo), lo usamos.
                 setUserId(user.uid);
             } else {
-                 // Si no hay usuario, forzamos la autenticación anónima para que la app cargue.
                  signInAnonymously(auth).then(cred => {
                     setUserId(cred.user.uid);
                  }).catch(e => {
                     console.error("Error en el fallback de autenticación anónima:", e);
                  });
             }
-            // Siempre marcamos como lista después de la primera comprobación
             setIsAuthReady(true);
         });
         
@@ -117,27 +93,21 @@ const useCollection = (collectionName) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // Lista de nombres de colecciones que se leen en minúsculas (según el código)
     const collectionsToListen = useMemo(() => ['products', 'clients', 'orders', 'providers', 'purchaseOrders', 'priceLists'], []);
 
 
     useEffect(() => {
-        // Solo intentamos cargar si la autenticación ya está lista Y tenemos un userId
         if (!isAuthReady || !userId || !db) {
             setLoading(false);
             return;
         };
 
         if (!collectionsToListen.includes(collectionName)) {
-            console.error(`Collection name "${collectionName}" is invalid or missing in list of tracked collections.`);
             setLoading(false);
             return;
         }
 
-        // Importante: La ruta usa nombres de colecciones en minúsculas.
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
-        
-        // El query filtra por documentos NO archivados
         const q = query(collection(db, path), where("archivado", "==", false));
         
         const unsub = onSnapshot(q, snapshot => {
@@ -157,7 +127,6 @@ const DataContext = createContext(null);
 const DataProvider = ({ children }) => {
     const { userId, isAuthReady, authDomainError, setAuthDomainError } = useAuth();
     
-    // Nombres de colecciones utilizados en useCollection
     const collections = ['products', 'clients', 'orders', 'providers', 'purchaseOrders'];
     const state = collections.reduce((acc, name) => {
         acc[name] = useCollection(name);
@@ -180,7 +149,6 @@ const DataProvider = ({ children }) => {
         try {
             await signInWithPopup(auth, provider);
         } catch (error) {
-            // Capturamos el error de dominio no autorizado y actualizamos el estado
             if (error.code === 'auth/unauthorized-domain') {
                  setAuthDomainError(true);
             }
@@ -191,7 +159,6 @@ const DataProvider = ({ children }) => {
 
     const createOrUpdateDoc = useCallback(async (collectionName, data, id) => {
         if (!userId || !db) throw new Error("No autenticado o DB no inicializada.");
-        // Importante: La ruta usa nombres de colecciones en minúsculas.
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
         const docRef = id ? doc(db, path, id) : doc(collection(db, path));
         await setDoc(docRef, { ...data, timestamp: serverTimestamp() }, { merge: true });
@@ -199,7 +166,6 @@ const DataProvider = ({ children }) => {
 
     const archiveDoc = useCallback(async (collectionName, id) => {
         if (!userId || !db) throw new Error("No autenticado o DB no inicializada.");
-        // Importante: La ruta usa nombres de colecciones en minúsculas.
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
         await updateDoc(doc(db, path, id), { archivado: true });
     }, [userId]);
@@ -216,7 +182,7 @@ const DataProvider = ({ children }) => {
         signInWithGoogle,
         createOrUpdateDoc,
         archiveDoc,
-        db, // Exportamos db y auth para el batch de pedidos
+        db, 
         auth
     };
 
@@ -264,7 +230,7 @@ const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distr
 const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
     try {
         const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-2.5-flash-preview-05-20';
-        const apiKey = ""; // API Key is provided by Canvas runtime.
+        const apiKey = ""; 
         const apiUrl = isImageGeneration 
             ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
             : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -295,7 +261,6 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
         }
 
     } catch (error) {
-        // Implementar reintento con backoff (Omitido por brevedad en este archivo, pero es una buena práctica)
         console.error("Error fetching Gemini/Imagen:", error);
         return `Hubo un error al conectar con el asistente de IA. Error: ${error.message}`;
     }
@@ -311,18 +276,17 @@ const AuthScreen = () => {
     const [loading, setLoading] = useState(false);
     const { login, register, signInWithGoogle, authDomainError } = useData();
     
-    // Si hay un error de dominio no autorizado, lo mostramos claramente
     const currentError = authDomainError 
         ? "Error Crítico: El dominio actual no está autorizado en Firebase. Añádelo en la consola de Firebase."
         : error;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Lógica de login/registro... (ya no se usa)
+        // Lógica de login/registro... 
     };
     
     const handleGoogleSignIn = async () => {
-        // Lógica de Google Sign-in... (ya no se usa)
+        // Lógica de Google Sign-in... 
     };
 
     return (
@@ -390,8 +354,8 @@ const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeade
 
 // 8.1 Módulos de Gestión Básica
 const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
-    const { providers } = useData(); // Obtenemos la lista de proveedores
-    const UNITS_PER_PALLET = 300; // Asumimos 50 cajas (udsPorCaja=6)
+    const { providers } = useData(); 
+    const UNITS_PER_PALLET = 300; 
 
     const [stockAmount, setStockAmount] = useState(0);
     const [stockUnit, setStockUnit] = useState('unidad');
@@ -406,7 +370,7 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
         if (stockUnit === 'caja') {
             unitsToAdd *= udsPorCaja;
         } else if (stockUnit === 'pallet') {
-            unitsToAdd *= UNITS_PER_PALLET; // Lógica para Pallet
+            unitsToAdd *= UNITS_PER_PALLET; 
         }
         
         const newStockTotal = (item.stockTotal || 0) + unitsToAdd;
@@ -419,12 +383,10 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
             <Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required />
             <Input label="Bodega" name="bodega" value={item.bodega} onChange={handleChange} />
             
-            {/* INSERCIÓN: Campo Proveedor */}
             <Select label="Proveedor" name="proveedorId" value={item.proveedorId} onChange={handleChange} required>
                 <option value="">-- Seleccionar Proveedor --</option>
                 {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </Select>
-            {/* FIN INSERCIÓN */}
 
             <Input label="Precio Unidad ($)" name="precioUnidad" type="number" value={item.precioUnidad} onChange={handleChange} required />
             <Input label="Costo por Unidad ($)" name="costo" type="number" value={item.costo} onChange={handleChange} required />
@@ -436,7 +398,6 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
                 <p className="text-2xl font-bold text-indigo-600">{item.stockTotal || 0}</p>
             </div>
             
-            {/* CORRECCIÓN: Lógica Stock por Unidad, Caja y Pallet ya implementada y verificada. */}
             <div className="col-span-full grid grid-cols-3 gap-2 items-end">
                 <Input label="Añadir Stock" type="number" value={stockAmount} onChange={handleStockChange} className="col-span-1" />
                 <Select label="Unidad" value={stockUnit} onChange={handleUnitChange} className="col-span-1">
@@ -452,7 +413,6 @@ const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
                     Aplicar
                 </Button>
             </div>
-            {/* Campo oculto para asegurar que stockTotal se envíe en el submit */}
             <input type="hidden" name="stockTotal" value={item.stockTotal} />
         </div>
     );
@@ -467,26 +427,22 @@ const ProductManager = () => {
     const [poDraft, setPODraft] = useState(null);
     const poRef = useRef();
 
-    // Función para mapear proveedorId a nombre
     const getProviderName = useCallback((providerId) => {
         return providers.find(p => p.id === providerId)?.nombre || 'N/A';
     }, [providers]);
 
 
-    // Función para crear un borrador de OC con productos en bajo stock
     const handleGeneratePO = () => {
         if (lowStockProducts.length === 0) return console.warn("No hay productos con stock bajo para generar una Orden de Compra.");
         
-        // Crear items para la OC (cantidad a comprar: 2 cajas por defecto)
         const poItems = lowStockProducts.map(p => ({
             productId: p.id,
             nombreProducto: p.nombre,
-            cantidad: p.udsPorCaja * 2, // 2 cajas por defecto
+            cantidad: p.udsPorCaja * 2, 
             costoUnidad: p.costo,
             subtotalLinea: p.costo * p.udsPorCaja * 2,
         }));
         
-        // Calcular costo total
         const costoTotal = poItems.reduce((sum, item) => sum + item.subtotalLinea, 0);
 
         setPODraft({
@@ -511,7 +467,6 @@ const ProductManager = () => {
     };
 
     const handleSave = async (itemData) => { 
-        // Aseguramos que stockTotal se guarde como número
         itemData.stockTotal = parseFloat(itemData.stockTotal) || 0;
         await createOrUpdateDoc('products', itemData, selectedItem?.id); 
         setIsModalOpen(false); 
@@ -520,10 +475,8 @@ const ProductManager = () => {
     const handleEdit = (item) => { setSelectedItem(item); setIsModalOpen(true); };
     const handleAddNew = () => { setSelectedItem(null); setIsModalOpen(true); };
     
-    // MODIFICACIÓN: Agregado Proveedor a la fila
     const ProductTableRow = ({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className="px-4 py-4">{getProviderName(item.proveedorId)}</td><td className={`px-4 py-4 ${item.stockTotal <= item.umbralMinimo ? 'text-red-500 font-bold' : ''}`}>{item.stockTotal}</td><td className="px-4 py-4">{FORMAT_CURRENCY(item.precioUnidad)}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>);
     
-    // MODIFICACIÓN: Agregado Proveedor al encabezado
     const ProductTableHeaders = ["Nombre", "Proveedor", "Stock", "Precio"];
     
     return (<div className="space-y-6">
@@ -577,7 +530,6 @@ const ProviderManager = () => <ManagerComponent
     title="Proveedores" 
     collectionName="providers" 
     model={PROVIDER_MODEL} 
-    // Modificado para incluir el campo 'responsable'
     FormFields={({ item, handleChange }) => (<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input label="Nombre (Bodega)" name="nombre" value={item.nombre} onChange={handleChange} required />
         <Input label="Nombre del Responsable" name="responsable" value={item.responsable} onChange={handleChange} />
@@ -586,9 +538,7 @@ const ProviderManager = () => <ManagerComponent
         <Input label="Email" name="email" value={item.email} onChange={handleChange} />
         <Input label="Dirección" name="direccion" value={item.direccion} onChange={handleChange} className="col-span-full"/>
     </div>)} 
-    // Agregado el encabezado 'Responsable'
     TableHeaders={["Nombre (Bodega)", "Responsable", "Teléfono"]} 
-    // Agregada la celda 'item.responsable'
     TableRow={({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50">
         <td className="px-4 py-4 font-semibold">{item.nombre}</td>
         <td className="px-4 py-4 hidden sm:table-cell">{item.responsable}</td>
@@ -601,7 +551,6 @@ const ProviderManager = () => <ManagerComponent
 />;
 
 // 8.2 Módulo de Pedidos (Orders)
-// --- FUNCIÓN PARA GENERAR EL ENLACE DE WHATSAPP DEL CLIENTE ---
 const generateWhatsAppLink = (client, order) => {
     if (!client || !client.telefono) return null;
 
@@ -623,7 +572,6 @@ const generateWhatsAppLink = (client, order) => {
     message += `*Total a Pagar: ${formattedTotal}*\n\n`;
     message += `Tu estado actual es: ${order.estado}.\n\n¡Gracias por tu compra!`;
     
-    // Aseguramos que el teléfono tenga solo números (sin +54 o prefijos)
     const cleanPhone = client.telefono.replace(/\D/g, ''); 
     const phoneNumber = cleanPhone.length >= 10 ? `549${cleanPhone}` : cleanPhone; 
 
@@ -682,7 +630,6 @@ const OrderForm = ({ model, onSave, onCancel }) => {
     const selectedClient = useMemo(() => clients.find(c => c.id === order.clienteId), [order.clienteId, clients]);
     const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
 
-    // Calcular totales
     useEffect(() => {
         const subtotal = order.items.reduce((sum, item) => sum + (item.subtotalLinea || 0), 0);
         const total = subtotal + (order.costoEnvio || 0) - (order.descuento || 0);
@@ -703,7 +650,6 @@ const OrderForm = ({ model, onSave, onCancel }) => {
     const handleAddItem = () => {
         if (!selectedProduct || order.items.some(i => i.productId === selectedProductId)) return;
 
-        // Determinar el precio basado en el régimen (simple)
         const price = selectedClient?.regimen === 'Mayorista' && selectedProduct.precioCaja > 0 
             ? selectedProduct.precioCaja 
             : selectedProduct.precioUnidad;
@@ -736,26 +682,19 @@ const OrderForm = ({ model, onSave, onCancel }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Nota: Se reemplazan los "alert" por logs y validación de UI para ser consistentes con la guía
         if (!order.clienteId) return console.warn("VALIDATION: Debes seleccionar un cliente."); 
         if (order.items.length === 0) return console.warn("VALIDATION: El pedido debe tener al menos un producto.");
         
-        // --- Lógica de Transacción (Guardar Pedido, Actualizar Saldo y Stock) ---
-        
-        // 1. Crear batch
         const batch = writeBatch(db);
         const userId = auth.currentUser.uid;
         
-        // 2. Referencias a documentos
-        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${userId}/orders`)).id; // Nuevo ID si no existe
+        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${userId}/orders`)).id; 
         const orderRef = doc(db, `/artifacts/${appId}/users/${userId}/orders`, orderId);
         const clientRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, order.clienteId);
 
-        // 3. Crear/Actualizar Pedido
         batch.set(orderRef, { 
             ...order, 
             timestamp: serverTimestamp(),
-            // Asegurarse de que los valores numéricos se guarden como números
             subtotal: parseFloat(order.subtotal) || 0,
             total: parseFloat(order.total) || 0,
             costoEnvio: parseFloat(order.costoEnvio) || 0,
@@ -764,11 +703,9 @@ const OrderForm = ({ model, onSave, onCancel }) => {
             id: orderId
         }, { merge: true });
 
-        // 4. Actualizar Saldo del Cliente (Asumiendo que el pedido es "a crédito" por simplicidad)
         const newSaldoPendiente = (selectedClient.saldoPendiente || 0) + (order.total || 0);
         batch.update(clientRef, { saldoPendiente: newSaldoPendiente });
 
-        // 5. Actualizar Stock de Productos
         for (const item of order.items) {
             const product = products.find(p => p.id === item.productId);
             if (product) {
@@ -778,14 +715,12 @@ const OrderForm = ({ model, onSave, onCancel }) => {
             }
         }
 
-        // 6. Ejecutar Batch
         try {
             await batch.commit();
             console.log("SUCCESS: Pedido Guardado y Stock Actualizado!");
-            onSave({ ...order, id: orderId }); // Llamar a onSave para cerrar el modal
+            onSave({ ...order, id: orderId }); 
         } catch (e) {
             console.error("Error al ejecutar la transacción:", e);
-            // Reemplazamos alert por log
             console.error("ERROR: Error al guardar el pedido. Revise la consola.");
         }
     };
@@ -878,7 +813,7 @@ const OrderManager = () => {
     const { orders, clients, createOrUpdateDoc, archiveDoc } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
-    const componentRef = useRef(); // Ref para impresión
+    const componentRef = useRef(); 
 
     const handleSave = async (itemData) => { 
         await createOrUpdateDoc('orders', itemData, selectedItem?.id); 
@@ -889,10 +824,8 @@ const OrderManager = () => {
     const handleAddNew = () => { setSelectedItem(null); setIsModalOpen(true); };
     const handlePrint = () => window.print();
 
-    // Ordenar los pedidos por fecha de creación descendente (simulado si no hay timestamp)
     const sortedOrders = useMemo(() => orders.slice().sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)), [orders]);
 
-    // Obtener cliente para el WhatsApp Link
     const getClientForOrder = useCallback((order) => {
         return clients.find(c => c.id === order.clienteId);
     }, [clients]);
@@ -906,7 +839,6 @@ const OrderManager = () => {
             <OrderForm model={selectedItem || ORDER_MODEL} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />
         </Modal>}
         
-        {/* Documento de Impresión Oculto */}
         {selectedItem && (
              <div className="hidden no-print">
                  <OrderPrintable ref={componentRef} order={selectedItem} client={getClientForOrder(selectedItem)} />
@@ -934,7 +866,6 @@ const OrderManager = () => {
                             </td>
                             <td className="px-4 py-4 text-sm">{item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
                             <td className="px-4 py-4 text-right space-x-2 flex justify-end">
-                                {/* Botón Imprimir/PDF */}
                                 <Button onClick={() => { setSelectedItem(item); setTimeout(handlePrint, 50); }} className="!p-2 !bg-blue-500 hover:!bg-blue-600" icon={Printer} title="Imprimir / Guardar PDF"/>
                                 
                                 {whatsappLink && (
@@ -960,8 +891,6 @@ const OrderManager = () => {
 };
 
 // 8.3 Módulo de Órdenes de Compra (Purchase Orders)
-
-// --- FUNCIÓN PARA GENERAR EL ENLACE DE WHATSAPP DEL PROVEEDOR ---
 const generatePurchaseOrderLink = (provider, po) => {
     if (!provider) return { whatsapp: null, email: null };
 
@@ -979,10 +908,8 @@ const generatePurchaseOrderLink = (provider, po) => {
     });
     body += `\nEstado: ${po.estado}.\n\nPor favor, confirme la recepción y la fecha de entrega.\n\nSaludos,\nDistriFort`;
     
-    // Email Link (mailto)
     const emailLink = provider.email ? `mailto:${provider.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}` : null;
     
-    // WhatsApp logic (assuming Argentina format 54 9)
     const cleanPhone = provider.telefono ? provider.telefono.replace(/\D/g, '') : null;
     const phoneNumber = cleanPhone && cleanPhone.length >= 10 ? `549${cleanPhone}` : cleanPhone;
     const whatsappLink = phoneNumber ? `https://wa.me/${phoneNumber}?text=${encodeURIComponent(body)}` : null;
@@ -1037,7 +964,6 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
     const [selectedProductId, setSelectedProductId] = useState('');
     const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
 
-    // Calcular costo total
     useEffect(() => {
         const costoTotal = po.items.reduce((sum, item) => sum + (item.subtotalLinea || 0), 0);
         setPo(prev => ({ ...prev, costoTotal }));
@@ -1045,7 +971,6 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 
     const handleHeaderChange = e => {
         const { name, value, type } = e.target;
-        // Se corrigió la sintaxis:
         let newPo = { ...po, [name]: type === 'number' ? parseFloat(value) || 0 : value };
         
         if (name === 'proveedorId') {
@@ -1061,8 +986,8 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
         const newItem = {
             productId: selectedProduct.id,
             nombreProducto: selectedProduct.nombre,
-            cantidad: selectedProduct.udsPorCaja || 1, // Sugiere 1 caja por defecto
-            costoUnidad: selectedProduct.costo, // Usamos el costo del producto como valor inicial
+            cantidad: selectedProduct.udsPorCaja || 1, 
+            costoUnidad: selectedProduct.costo, 
             subtotalLinea: selectedProduct.costo * (selectedProduct.udsPorCaja || 1),
         };
 
@@ -1086,7 +1011,6 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 
     const handleSubmit = e => {
         e.preventDefault();
-        // Reemplazamos alert por log
         if (!po.proveedorId) return console.warn("VALIDATION: Debes seleccionar un proveedor.");
         if (po.items.length === 0) return console.warn("VALIDATION: La orden debe tener al menos un producto.");
         onSave(po);
@@ -1174,7 +1098,7 @@ const PurchaseOrderManager = () => {
     const { purchaseOrders, providers, products, createOrUpdateDoc, archiveDoc } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
-    const componentRef = useRef(); // Ref para impresión
+    const componentRef = useRef(); 
 
     const handleSave = async (itemData) => { 
         await createOrUpdateDoc('purchaseOrders', itemData, selectedItem?.id); 
@@ -1187,7 +1111,6 @@ const PurchaseOrderManager = () => {
 
     const sortedPurchaseOrders = useMemo(() => purchaseOrders.slice().sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)), [purchaseOrders]);
 
-    // Obtener proveedor para el Link de Comunicación
     const getProviderForPO = useCallback((po) => {
         return providers.find(p => p.id === po.proveedorId);
     }, [providers]);
@@ -1206,7 +1129,6 @@ const PurchaseOrderManager = () => {
             />
         </Modal>}
         
-        {/* Documento de Impresión Oculto */}
         {selectedItem && (
              <div className="hidden no-print">
                  <PurchaseOrderPrintable ref={componentRef} po={selectedItem} provider={getProviderForPO(selectedItem)} />
@@ -1234,10 +1156,8 @@ const PurchaseOrderManager = () => {
                             </td>
                             <td className="px-4 py-4 text-sm">{item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
                             <td className="px-4 py-4 text-right space-x-2 flex justify-end">
-                                {/* Botón Imprimir/PDF */}
                                 <Button onClick={() => { setSelectedItem(item); setTimeout(handlePrint, 50); }} className="!p-2 !bg-blue-500 hover:!bg-blue-600" icon={Printer} title="Imprimir / Guardar PDF"/>
 
-                                {/* WhatsApp Button */}
                                 {communicationLinks.whatsapp && (
                                     <a 
                                         href={communicationLinks.whatsapp} 
@@ -1249,7 +1169,6 @@ const PurchaseOrderManager = () => {
                                         <Send className="w-4 h-4"/>
                                     </a>
                                 )}
-                                {/* Email Button */}
                                 {communicationLinks.email && (
                                     <a 
                                         href={communicationLinks.email} 
@@ -1283,7 +1202,6 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                 <thead>
                     <tr className="bg-gray-100 font-semibold">
                         <td className="p-2 border">Producto</td>
-                        {/* CAMBIO: 'Marca' -> 'Bodega' */}
                         <td className="p-2 border">Bodega</td>
                         <td className="p-2 border text-right">Precio Unitario</td>
                         <td className="p-2 border text-right">Stock (Uds)</td>
@@ -1293,7 +1211,6 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                     {products.map((p) => (
                         <tr key={p.id}>
                             <td className="p-2 border">{p.nombre}</td>
-                            {/* CAMBIO: p.marca -> p.bodega */}
                             <td className="p-2 border">{p.bodega}</td>
                             <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
                             <td className="p-2 border text-right">{p.stockTotal}</td>
@@ -1314,7 +1231,6 @@ const PriceListManager = () => {
     
     const handlePrint = () => window.print();
 
-    // Generar mensaje de WhatsApp/Email para la lista de precios
     const generatePriceListMessage = useCallback((client, products) => {
         if (!client) return { whatsapp: null, email: null };
 
@@ -1372,7 +1288,6 @@ const PriceListManager = () => {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    {/* CAMBIO: 'Marca' -> 'Bodega' */}
                                     {["Producto", "Bodega", "Precio Unitario", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
                                 </tr>
                             </thead>
@@ -1380,7 +1295,6 @@ const PriceListManager = () => {
                                 {products.map(p => (
                                     <tr key={p.id}>
                                         <td className="px-4 py-4 font-semibold">{p.nombre}</td>
-                                        {/* CAMBIO: p.marca -> p.bodega */}
                                         <td className="px-4 py-4">{p.bodega}</td>
                                         <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
                                         <td className="px-4 py-4 text-right">{p.stockTotal}</td>
@@ -1392,7 +1306,6 @@ const PriceListManager = () => {
                 </div>
             )}
             
-            {/* Documento de Impresión Oculto */}
             {client && (
                  <div className="hidden no-print">
                      <PriceListPrintable ref={componentRef} products={products} client={client} />
@@ -1426,9 +1339,9 @@ const ShippingQuoter = () => {
     const [weight, setWeight] = useState(0);
 
     const { totalCost, baseRate, ratePerKm, ratePerKg } = useMemo(() => {
-        const BASE_RATE = 1500; // Costo base fijo
-        const RATE_PER_KM = 25; // Costo por kilómetro
-        const RATE_PER_KG = 5;  // Costo por kilogramo
+        const BASE_RATE = 1500; 
+        const RATE_PER_KM = 25; 
+        const RATE_PER_KG = 5;  
         
         const dist = parseFloat(distance) || 0;
         const wgt = parseFloat(weight) || 0;
@@ -1504,10 +1417,8 @@ const ProfitCalculator = () => {
         
         const profit = p - c;
         
-        // Margen (Gross Margin): (Revenue - COGS) / Revenue
         const marginP = p > 0 ? (profit / p) : 0;
         
-        // Markup: (Price - Cost) / Cost
         const markupP = c > 0 ? (profit / c) : 0;
 
         return {
@@ -1569,7 +1480,6 @@ const AIChat = () => {
         setLoading(true);
         setResponse('...Generando respuesta de IA...');
         
-        // Incluir contexto de negocio
         const context = "Actúa como un analista de negocios experto en distribución de bebidas. Ofrece consejos concisos y prácticos. Limita la respuesta a un máximo de 200 palabras.";
         const fullPrompt = `${context} -- Pregunta del usuario: ${prompt}`;
         
@@ -1604,6 +1514,218 @@ const AIChat = () => {
     );
 };
 
+const PromotionGenerator = () => {
+    const [prompt, setPrompt] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleGenerateImage = async (e) => {
+        e.preventDefault();
+        if (!prompt.trim()) return;
+
+        setLoading(true);
+        setError('');
+        setImageUrl('');
+
+        const stylePrompt = `, digital art, vibrant colors, social media ready, professional, wine distribution focus.`;
+        const fullPrompt = `${prompt}${stylePrompt}`;
+
+        try {
+            const url = await secureGeminiFetch(fullPrompt, true); 
+            setImageUrl(url);
+        } catch (e) {
+            setError('Error al generar la imagen. Intenta con una descripción más específica.');
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDownload = () => {
+        if (imageUrl) {
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = 'promo_distrifort_ia.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    const handleShare = () => {
+        if (!imageUrl) return;
+        
+        const shareMessage = encodeURIComponent("¡Nueva Promoción de DistriFort!\n\nMira esta imagen especial que creamos para ti. Descárgala desde el sitio web.");
+
+        const whatsappLink = `https://wa.me/5491112345678?text=${shareMessage}`;
+        window.open(whatsappLink, '_blank');
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
+                <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2"><ImageIcon className="w-6 h-6"/><span>Generador de Promociones Visuales (IA)</span></h4>
+                <p className="text-sm text-gray-600">Describe la promoción que deseas generar para redes sociales (Ej: "Una botella de vino tinto Malbec en un paisaje nevado con el texto 50% OFF").</p>
+                
+                <form onSubmit={handleGenerateImage} className="flex space-x-3 pt-2">
+                    <Input 
+                        name="imagePrompt" 
+                        value={prompt} 
+                        onChange={e => setPrompt(e.target.value)} 
+                        placeholder="Describe tu imagen promocional..."
+                        className="flex-1"
+                        required
+                    />
+                    <Button type="submit" disabled={!prompt.trim() || loading} icon={ImageIcon}>
+                        {loading ? 'Creando...' : 'Generar Imagen'}
+                    </Button>
+                </form>
+
+                {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-xl">
+                <h4 className="text-lg font-semibold text-gray-700 mb-4">Resultado</h4>
+                {loading ? (
+                    <PageLoader text="Dibujando promoción..." />
+                ) : imageUrl ? (
+                    <div className="space-y-4">
+                        <img src={imageUrl} alt="Promoción Generada por IA" className="w-full max-w-lg mx-auto rounded-xl shadow-lg border" />
+                        <div className="flex justify-center space-x-4">
+                            <Button onClick={handleDownload} className="!bg-blue-500 hover:!bg-blue-600">Descargar PNG</Button>
+                            <Button onClick={handleShare} icon={Send} className="!bg-green-500 hover:!bg-green-600">Compartir (WhatsApp)</Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center text-gray-500 py-10">La imagen generada aparecerá aquí.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+const Tools = () => {
+    const [subPage, setSubPage] = useState('calculator'); 
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Herramientas de Distribución">
+                <div className="flex space-x-3">
+                    <Button 
+                        onClick={() => setSubPage('calculator')} 
+                        className={subPage === 'calculator' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
+                        icon={DollarSign}
+                    >
+                        Calculadora
+                    </Button>
+                    <Button 
+                        onClick={() => setSubPage('ai')} 
+                        className={subPage === 'ai' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
+                        icon={BrainCircuit}
+                    >
+                        Asistente IA
+                    </Button>
+                    <Button 
+                        onClick={() => setSubPage('promo')} 
+                        className={subPage === 'promo' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
+                        icon={ImageIcon}
+                    >
+                        Promo (IA)
+                    </Button>
+                </div>
+            </PageHeader>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {subPage === 'calculator' && <ProfitCalculator />}
+                {subPage === 'ai' && <AIChat />}
+                {subPage === 'promo' && <PromotionGenerator />}
+            </div>
+        </div>
+    );
+};
+
+const Dashboard = ({ setCurrentPage }) => {
+    const { products, orders, clients, purchaseOrders } = useData();
+
+    const productCostMap = useMemo(() => new Map(products.map(p => [p.id, p.costo])), [products]);
+    const lowStockCount = useMemo(() => products.filter(p => p.stockTotal <= p.umbralMinimo).length, [products]);
+    const totalInventoryValue = useMemo(() => 
+        products.reduce((sum, p) => sum + (p.costo * p.stockTotal), 0), 
+        [products]
+    );
+
+    const totalRevenue = useMemo(() => orders.reduce((sum, o) => sum + o.total, 0), [orders]);
+    
+    const ordersThisMonth = useMemo(() => {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return orders.filter(o => 
+            o.timestamp && new Date(o.timestamp.seconds * 1000) >= startOfMonth
+        );
+    }, [orders]);
+
+    const revenueThisMonth = useMemo(() => 
+        ordersThisMonth.reduce((sum, o) => sum + o.total, 0), 
+        [ordersThisMonth]
+    );
+    
+    const grossProfitTotal = useMemo(() => {
+        return orders.reduce((sum, order) => {
+            const orderCost = order.items.reduce((costSum, item) => {
+                const costPerUnit = productCostMap.get(item.productId) || 0;
+                return costSum + (costPerUnit * item.cantidad);  
+            }, 0);
+            return sum + (order.total - orderCost);
+        }, 0);
+    }, [orders, productCostMap]);
+    
+    const grossMarginPercent = useMemo(() => {
+        if (totalRevenue === 0) return 0;
+        return (grossProfitTotal / totalRevenue) * 100;
+    }, [totalRevenue, grossProfitTotal]);
+
+    const dashboardCards = [
+        { title: "Ingreso Total (Histórico)", value: FORMAT_CURRENCY(totalRevenue), icon: DollarSign, color: "green", page: 'Pedidos' },
+        { title: "Margen Bruto (%)", value: `${grossMarginPercent.toFixed(1)}%`, icon: TrendingUp, color: grossMarginPercent >= 20 ? "green" : "red", page: 'Herramientas' },
+        { title: "Valor del Inventario", value: FORMAT_CURRENCY(totalInventoryValue), icon: Package, color: "indigo", page: 'Inventario' },
+        { title: "Ingreso del Mes", value: FORMAT_CURRENCY(revenueThisMonth), icon: FileText, color: "blue", page: 'Pedidos' },
+        { title: "Productos Stock Bajo", value: lowStockCount, icon: AlertCircle, color: lowStockCount > 0 ? "red" : "green", page: 'Inventario' },
+        { title: "Pedidos Pendientes", value: orders.filter(o => o.estado === 'Pendiente').length, icon: ShoppingCart, color: "yellow", page: 'Pedidos' },
+        { title: "Cuentas por Cobrar", value: FORMAT_CURRENCY(clients.reduce((sum, c) => sum + c.saldoPendiente, 0)), icon: TrendingDown, color: "red", page: 'Clientes' },
+        { title: "Órdenes de Compra (Pendientes)", value: purchaseOrders.filter(po => po.estado === 'Pendiente').length, icon: Truck, color: "indigo", page: 'Órdenes de Compra' },
+    ];
+
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Panel de Control">
+                <p className="text-sm text-gray-500">Métricas clave de negocio para DistriFort.</p>
+            </PageHeader>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                {dashboardCards.map(card => (
+                    <Card 
+                        key={card.title} 
+                        title={card.title} 
+                        value={card.value} 
+                        icon={card.icon} 
+                        color={card.color} 
+                        onClick={() => setCurrentPage(card.page)}
+                    />
+                ))}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Análisis Rápido</h3>
+                <p className="text-gray-600">
+                    Tu valor total de inventario es de **{FORMAT_CURRENCY(totalInventoryValue)}**. Actualmente tienes **{lowStockCount}** productos bajo el umbral de stock. Tu margen bruto total es de **{grossMarginPercent.toFixed(1)}%**, indicando una buena salud financiera general.
+                </p>
+            </div>
+        </div>
+    );
+};
+
 // 8.8 Módulo Importador de Listas de Precios (NUEVO)
 const PriceListImporter = () => {
     const { providers, products, createOrUpdateDoc } = useData();
@@ -1626,14 +1748,12 @@ const PriceListImporter = () => {
         setLoading(true);
         setImportLog("1. Estructurando datos con IA...");
 
-        // 1. Usar la IA para formatear el texto a JSON
-        // Nota: Agregamos el header 'Response-Type' para forzar una respuesta estructurada
-        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo", y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo" y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
         
         let jsonResponse;
         try {
             const model = 'gemini-2.5-flash-preview-05-20';
-            const apiKey = ""; // Canvas runtime or Vercel ENV
+            const apiKey = ""; 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
             const response = await fetch(apiUrl, {
@@ -1687,7 +1807,6 @@ const PriceListImporter = () => {
                 continue;
             }
             
-            // Buscar si el producto ya existe por nombre
             const existingProduct = products.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim());
 
             if (existingProduct) {
@@ -1695,7 +1814,6 @@ const PriceListImporter = () => {
                 await createOrUpdateDoc('products', {
                     costo: parseFloat(item.costo) || 0,
                     precioUnidad: parseFloat(item.precioUnidad) || 0,
-                    // Dejamos que la bodega y otros campos persistan
                 }, existingProduct.id);
                 updatesCount++;
             } else {
@@ -1705,7 +1823,7 @@ const PriceListImporter = () => {
                     nombre: item.nombre,
                     costo: parseFloat(item.costo) || 0,
                     precioUnidad: parseFloat(item.precioUnidad) || 0,
-                    proveedorId: providerId, // Vincula el nuevo producto al proveedor
+                    proveedorId: providerId, // Usamos el ID del proveedor
                     bodega: `${providerName} / Listado`, // Bodega del proveedor
                 });
                 updatesCount++;
@@ -1759,265 +1877,40 @@ const PriceListImporter = () => {
 };
 
 
-// 8.9 Módulo Generador de Imágenes de Promoción (IA)
-const PromotionGenerator = () => {
-    const [prompt, setPrompt] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    const handleGenerateImage = async (e) => {
-        e.preventDefault();
-        if (!prompt.trim()) return;
-
-        setLoading(true);
-        setError('');
-        setImageUrl('');
-
-        const stylePrompt = `, digital art, vibrant colors, social media ready, professional, wine distribution focus.`;
-        const fullPrompt = `${prompt}${stylePrompt}`;
-
-        try {
-            const url = await secureGeminiFetch(fullPrompt, true); // true para generación de imagen
-            setImageUrl(url);
-        } catch (e) {
-            setError('Error al generar la imagen. Intenta con una descripción más específica.');
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDownload = () => {
-        if (imageUrl) {
-            const link = document.createElement('a');
-            link.href = imageUrl;
-            link.download = 'promo_distrifort_ia.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    };
-
-    const handleShare = () => {
-        if (!imageUrl) return;
-        
-        // Simulación: No se puede enviar una imagen base64 directamente por wa.me,
-        // pero podemos generar un mensaje pidiendo al cliente que vea la promo.
-        const shareMessage = encodeURIComponent("¡Nueva Promoción de DistriFort!\n\nMira esta imagen especial que creamos para ti. Descárgala desde el sitio web.");
-
-        // Usamos un número genérico como ejemplo de contacto
-        const whatsappLink = `https://wa.me/5491112345678?text=${shareMessage}`;
-        window.open(whatsappLink, '_blank');
-    };
-
-    return (
-        <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
-                <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2"><ImageIcon className="w-6 h-6"/><span>Generador de Promociones Visuales (IA)</span></h4>
-                <p className="text-sm text-gray-600">Describe la promoción que deseas generar para redes sociales (Ej: "Una botella de vino tinto Malbec en un paisaje nevado con el texto 50% OFF").</p>
-                
-                <form onSubmit={handleGenerateImage} className="flex space-x-3 pt-2">
-                    <Input 
-                        name="imagePrompt" 
-                        value={prompt} 
-                        onChange={e => setPrompt(e.target.value)} 
-                        placeholder="Describe tu imagen promocional..."
-                        className="flex-1"
-                        required
-                    />
-                    <Button type="submit" disabled={!prompt.trim() || loading} icon={ImageIcon}>
-                        {loading ? 'Creando...' : 'Generar Imagen'}
-                    </Button>
-                </form>
-
-                {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-xl">
-                <h4 className="text-lg font-semibold text-gray-700 mb-4">Resultado</h4>
-                {loading ? (
-                    <PageLoader text="Dibujando promoción..." />
-                ) : imageUrl ? (
-                    <div className="space-y-4">
-                        <img src={imageUrl} alt="Promoción Generada por IA" className="w-full max-w-lg mx-auto rounded-xl shadow-lg border" />
-                        <div className="flex justify-center space-x-4">
-                            <Button onClick={handleDownload} className="!bg-blue-500 hover:!bg-blue-600">Descargar PNG</Button>
-                            <Button onClick={handleShare} icon={Send} className="!bg-green-500 hover:!bg-green-600">Compartir (WhatsApp)</Button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center text-gray-500 py-10">La imagen generada aparecerá aquí.</div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-
-const Tools = () => {
-    const [subPage, setSubPage] = useState('calculator'); // 'calculator' o 'ai'
-
-    return (
-        <div className="space-y-6">
-            <PageHeader title="Herramientas de Distribución">
-                <div className="flex space-x-3">
-                    <Button 
-                        onClick={() => setSubPage('calculator')} 
-                        className={subPage === 'calculator' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
-                        icon={DollarSign}
-                    >
-                        Calculadora
-                    </Button>
-                    <Button 
-                        onClick={() => setSubPage('ai')} 
-                        className={subPage === 'ai' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
-                        icon={BrainCircuit}
-                    >
-                        Asistente IA
-                    </Button>
-                    <Button 
-                        onClick={() => setSubPage('promo')} 
-                        className={subPage === 'promo' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'}
-                        icon={ImageIcon}
-                    >
-                        Promo (IA)
-                    </Button>
-                </div>
-            </PageHeader>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {subPage === 'calculator' && <ProfitCalculator />}
-                {subPage === 'ai' && <AIChat />}
-                {subPage === 'promo' && <PromotionGenerator />}
-            </div>
-        </div>
-    );
-};
-
-const Dashboard = ({ setCurrentPage }) => {
-    const { products, orders, clients, purchaseOrders } = useData();
-
-    // 1. Métricas de Inventario
-    const lowStockCount = useMemo(() => products.filter(p => p.stockTotal <= p.umbralMinimo), [products]).length;
-    const totalInventoryValue = useMemo(() => 
-        products.reduce((sum, p) => sum + (p.costo * p.stockTotal), 0), 
-        [products]
-    );
-
-    // 2. Métricas de Ventas y Financieras
-    const totalRevenue = useMemo(() => orders.reduce((sum, o) => sum + o.total, 0), [orders]);
-    
-    const ordersThisMonth = useMemo(() => {
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        return orders.filter(o => 
-            o.timestamp && new Date(o.timestamp.seconds * 1000) >= startOfMonth
-        );
-    }, [orders]);
-
-    const revenueThisMonth = useMemo(() => 
-        ordersThisMonth.reduce((sum, o) => sum + o.total, 0), 
-        [ordersThisMonth]
-    );
-    
-    // 3. Métricas de Margen (simulado)
-    const productCostMap = useMemo(() => new Map(products.map(p => [p.id, p.costo])), [products]);
-    
-    const grossProfitTotal = useMemo(() => {
-        return orders.reduce((sum, order) => {
-            const orderCost = order.items.reduce((costSum, item) => {
-                const costPerUnit = productCostMap.get(item.productId) || 0;
-                // Usamos item.cantidad del pedido
-                return costSum + (costPerUnit * item.cantidad); 
-            }, 0);
-            // Ganancia = Ingreso - Costo
-            return sum + (order.total - orderCost);
-        }, 0);
-    }, [orders, productCostMap]);
-    
-    const grossMarginPercent = useMemo(() => {
-        if (totalRevenue === 0) return 0;
-        return (grossProfitTotal / totalRevenue) * 100;
-    }, [totalRevenue, grossProfitTotal]);
-
-    const dashboardCards = [
-        { title: "Ingreso Total (Histórico)", value: FORMAT_CURRENCY(totalRevenue), icon: DollarSign, color: "green", page: 'Pedidos' },
-        { title: "Margen Bruto (%)", value: `${grossMarginPercent.toFixed(1)}%`, icon: TrendingUp, color: grossMarginPercent >= 20 ? "green" : "red", page: 'Herramientas' },
-        { title: "Valor del Inventario", value: FORMAT_CURRENCY(totalInventoryValue), icon: Package, color: "indigo", page: 'Inventario' },
-        { title: "Ingreso del Mes", value: FORMAT_CURRENCY(revenueThisMonth), icon: FileText, color: "blue", page: 'Pedidos' },
-        { title: "Productos Stock Bajo", value: lowStockCount, icon: AlertCircle, color: lowStockCount > 0 ? "red" : "green", page: 'Inventario' },
-        { title: "Pedidos Pendientes", value: orders.filter(o => o.estado === 'Pendiente').length, icon: ShoppingCart, color: "yellow", page: 'Pedidos' },
-        { title: "Cuentas por Cobrar", value: FORMAT_CURRENCY(clients.reduce((sum, c) => sum + c.saldoPendiente, 0)), icon: TrendingDown, color: "red", page: 'Clientes' },
-        { title: "Órdenes de Compra (Pendientes)", value: purchaseOrders.filter(po => po.estado === 'Pendiente').length, icon: Truck, color: "indigo", page: 'Órdenes de Compra' },
-    ];
-
-
-    return (
-        <div className="space-y-6">
-            <PageHeader title="Panel de Control">
-                <p className="text-sm text-gray-500">Métricas clave de negocio para DistriFort.</p>
-            </PageHeader>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                {dashboardCards.map(card => (
-                    <Card 
-                        key={card.title} 
-                        title={card.title} 
-                        value={card.value} 
-                        icon={card.icon} 
-                        color={card.color} 
-                        onClick={() => setCurrentPage(card.page)} // CORRECCIÓN: Propagación del onClick
-                    />
-                ))}
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Análisis Rápido</h3>
-                <p className="text-gray-600">
-                    Tu valor total de inventario es de **{FORMAT_CURRENCY(totalInventoryValue)}**. Actualmente tienes **{lowStockCount}** productos bajo el umbral de stock. Tu margen bruto total es de **{grossMarginPercent.toFixed(1)}%**, indicando una buena salud financiera general.
-                </p>
-            </div>
-        </div>
-    );
-};
-
 // --- 9. APP PRINCIPAL Y NAVEGACIÓN ---
 const AppLayout = () => {
     const { logout } = useData();
-    // Usamos useState para mantener el estado de la página en AppLayout
-    const [currentPage, setCurrentPage] = useState('Dashboard'); 
+    const [currentPage, setCurrentPage] = useState('Dashboard');    
     
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard }, { name: 'Inventario', icon: Package },
         { name: 'Clientes', icon: Users }, { name: 'Proveedores', icon: Building },
         { name: 'Pedidos', icon: ShoppingCart }, { name: 'Órdenes de Compra', icon: Truck },
-        { name: 'Lista de Precios', icon: FileText }, 
-        { name: 'Importar Lista (IA)', icon: Upload }, // NUEVO MÓDULO
+        { name: 'Lista de Precios', icon: FileText },  
+        { name: 'Importar Lista (IA)', icon: Upload }, 
         { name: 'Buscar', icon: Search }, { name: 'Herramientas', icon: BrainCircuit },
-        { name: 'Cotización', icon: MapPin }, 
+        { name: 'Cotización', icon: MapPin },  
     ];
 
-    // Función para cambiar de página desde el Dashboard
     const handleSetCurrentPage = (pageName) => {
         setCurrentPage(pageName);
     };
 
     const renderPage = () => {
-        // CORRECCIÓN: Muestra el error si Firebase no pudo inicializarse.
-        if (Object.keys(firebaseConfig).length === 0) return <div className="p-8 text-center bg-red-100 border border-red-400 rounded-xl text-red-800 font-semibold">Error: La configuración de Firebase no se pudo cargar. Verifique las variables de entorno (VITE_FIREBASE_CONFIG) y el formato JSON.</div>;
+        if (Object.keys(firebaseConfig).length === 0) return <div className="p-10 text-center text-red-500 font-semibold border-2 border-red-300 rounded-xl bg-red-50 mt-10">Error: La configuración de Firebase no se pudo cargar.</div>
         
         switch (currentPage) {
-            case 'Dashboard': return <Dashboard setCurrentPage={handleSetCurrentPage} />; // Pasa la función de navegación
+            case 'Dashboard': return <Dashboard setCurrentPage={handleSetCurrentPage} />; 
             case 'Inventario': return <ProductManager />;
             case 'Clientes': return <ClientManager />;
             case 'Proveedores': return <ProviderManager />;
-            case 'Pedidos': return <OrderManager />; 
+            case 'Pedidos': return <OrderManager />;  
             case 'Órdenes de Compra': return <PurchaseOrderManager />;
             case 'Lista de Precios': return <PriceListManager />;
-            case 'Importar Lista (IA)': return <PriceListImporter />; // NUEVO
-            case 'Buscar': return <GlobalSearch />; 
-            case 'Herramientas': return <Tools />; 
-            case 'Cotización': return <ShippingQuoter />; 
+            case 'Importar Lista (IA)': return <PriceListImporter />; 
+            case 'Buscar': return <GlobalSearch />;  
+            case 'Herramientas': return <Tools />;  
+            case 'Cotización': return <ShippingQuoter />;  
             default: return <Dashboard setCurrentPage={handleSetCurrentPage} />;
         }
     };
@@ -2026,7 +1919,6 @@ const AppLayout = () => {
         <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
             <nav className="fixed bottom-0 left-0 right-0 md:relative md:w-64 bg-white shadow-lg p-2 md:p-4 flex flex-col shrink-0 z-20 border-t md:border-t-0 md:shadow-none md:border-r">
                 <h1 className="hidden md:block text-2xl font-black text-indigo-600 mb-8 px-2">DistriFort</h1>
-                {/* Scroll horizontal para móvil: flex, overflow-x-auto, whitespace-nowrap */}
                 <ul className="flex flex-row md:flex-col md:space-y-2 flex-grow overflow-x-auto whitespace-nowrap md:overflow-x-visible">
                     {navItems.map(item => (
                         <li key={item.name} className="flex-shrink-0 md:flex-shrink">
@@ -2052,6 +1944,20 @@ const AppLayout = () => {
 
 // --- PUNTO DE ENTRADA ---
 export default function DistriFortApp() {
+    // Si firebaseConfig no pudo ser inicializado por un error de Vercel/Vite, AppController lo mostrará.
+    const isFirebaseConfigured = Object.keys(firebaseConfig).length > 0;
+
+    if (!isFirebaseConfigured) {
+        // Renderiza el error de Firebase inmediatamente si la configuración falló en el parseo
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="p-10 text-center text-red-500 font-semibold border-2 border-red-300 rounded-xl bg-red-50 shadow-lg">
+                    Error: La configuración de Firebase no se pudo cargar. Por favor, verifique que la variable de entorno VITE_FIREBASE_JSON_ONLY contenga un JSON válido y puro.
+                </div>
+            </div>
+        );
+    }
+
     return (
         <DataProvider>
             <AppController />
@@ -2062,17 +1968,11 @@ export default function DistriFortApp() {
 const AppController = () => {
     const { userId, isAuthReady, loading } = useData();
     
-    // Si la configuración de Firebase falló al inicio, mostramos el error de la AppLayout
-    if (Object.keys(firebaseConfig).length === 0) {
-        return <AppLayout />;
-    }
-
     if (!isAuthReady) {
         return <PageLoader text="Inicializando..." />;
     }
     
     if(loading) {
-        // Mostramos cargando solo si la Auth está lista pero los datos no han llegado
         return <PageLoader text="Cargando datos..." />;
     }
 
