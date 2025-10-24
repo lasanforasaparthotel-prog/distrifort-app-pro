@@ -426,10 +426,10 @@ const ProductManager = () => {
 const ClientManager = () => <ManagerComponent title="Clientes" collectionName="clients" model={CLIENT_MODEL} FormFields={({ item, handleChange }) => (<div className="grid grid-cols-1 md:grid-cols-2 gap-4"><Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required /><Input label="CUIT" name="cuit" value={item.cuit} onChange={handleChange} /><Input label="Teléfono" name="telefono" value={item.telefono} onChange={handleChange} /><Input label="Email" name="email" value={item.email} onChange={handleChange} /><Input label="Dirección" name="direccion" value={item.direccion} onChange={handleChange} className="col-span-full"/><Input label="Límite de Crédito ($)" name="limiteCredito" type="number" value={item.limiteCredito} onChange={handleChange} /><Input label="Mínimo de Compra ($)" name="minimoCompra" type="number" value={item.minimoCompra} onChange={handleChange} /><Select label="Régimen" name="regimen" value={item.regimen} onChange={handleChange}><option>Minorista</option><option>Mayorista</option></Select></div>)} TableHeaders={["Nombre", "Teléfono", "Saldo"]} TableRow={({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className="px-4 py-4 hidden sm:table-cell">{item.telefono}</td><td className="px-4 py-4 font-mono">{FORMAT_CURRENCY(item.saldoPendiente)}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>)} />;
 
 // 8.3 Módulos de Gestión: Proveedores
-const ProviderManager = () => <ManagerComponent 
-    title="Proveedores" 
-    collectionName="providers" 
-    model={PROVIDER_MODEL} 
+const ProviderManager = () => <ManagerComponent 
+    title="Proveedores" 
+    collectionName="providers" 
+    model={PROVIDER_MODEL} 
     FormFields={({ item, handleChange }) => (<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input label="Nombre (Bodega)" name="nombre" value={item.nombre} onChange={handleChange} required />
         <Input label="Nombre del Responsable" name="responsable" value={item.responsable} onChange={handleChange} />
@@ -437,8 +437,8 @@ const ProviderManager = () => <ManagerComponent 
         <Input label="Teléfono" name="telefono" value={item.telefono} onChange={handleChange} />
         <Input label="Email" name="email" value={item.email} onChange={handleChange} />
         <Input label="Dirección" name="direccion" value={item.direccion} onChange={handleChange} className="col-span-full"/>
-    </div>)} 
-    TableHeaders={["Nombre (Bodega)", "Responsable", "Teléfono"]} 
+    </div>)} 
+    TableHeaders={["Nombre (Bodega)", "Responsable", "Teléfono"]} 
     TableRow={({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50">
         <td className="px-4 py-4 font-semibold">{item.nombre}</td>
         <td className="px-4 py-4 hidden sm:table-cell">{item.responsable}</td>
@@ -447,7 +447,7 @@ const ProviderManager = () => <ManagerComponent 
             <Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
             <Button onClick={() => archiveDoc('providers', item.id)} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
         </td>
-    </tr>)} 
+    </tr>)} 
 />;
 
 // 8.4 Módulos de Gestión: Pedidos (OrderManager)
@@ -460,7 +460,7 @@ const generateWhatsAppLink = (client, order) => {
     let message = `¡Hola ${client.nombre}!\n\n`;
     message += `Tu Pedido de DistriFort, con N° ${order.id || 'N/A'} y fecha ${orderDate}, está listo.\n\n`;
     message += `*Detalle del Pedido:*\n`;
-    
+    
     order.items.forEach(item => {
         message += `- ${item.cantidad}x ${item.nombreProducto} (${FORMAT_CURRENCY(item.subtotalLinea)})\n`;
     });
@@ -471,54 +471,54 @@ const generateWhatsAppLink = (client, order) => {
     if (order.descuento > 0) message += `Descuento: -${FORMAT_CURRENCY(order.descuento)}\n`;
     message += `*Total a Pagar: ${formattedTotal}*\n\n`;
     message += `Tu estado actual es: ${order.estado}.\n\n¡Gracias por tu compra!`;
-    
-    const cleanPhone = client.telefono.replace(/\D/g, ''); 
-    const phoneNumber = cleanPhone.length >= 10 ? `549${cleanPhone}` : cleanPhone; 
+    
+    const cleanPhone = client.telefono.replace(/\D/g, ''); 
+    const phoneNumber = cleanPhone.length >= 10 ? `549${cleanPhone}` : cleanPhone; 
 
     return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 };
 
 const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
     <PrintableDocument ref={ref} title={`PEDIDO N° ${order.id || 'N/A'}`}>
-        <div className="text-sm space-y-4">
-            <h3 className="text-lg font-bold">Datos del Cliente</h3>
-            <p><strong>Cliente:</strong> {client?.nombre || order.nombreCliente}</p>
-            <p><strong>Teléfono:</strong> {client?.telefono || 'N/A'}</p>
-            <p><strong>Dirección:</strong> {client?.direccion || 'N/A'}</p>
-            
-            <h3 className="text-lg font-bold mt-6 border-t pt-4">Detalle del Pedido</h3>
-            <table className="w-full border-collapse">
-                <thead>
-                    <tr className="bg-gray-100 font-semibold">
-                        <td className="p-2 border">Producto</td>
-                        <td className="p-2 border text-right">Cantidad</td>
-                        <td className="p-2 border text-right">Precio Unitario</td>
-                        <td className="p-2 border text-right">Subtotal</td>
-                    </tr>
-                </thead>
-                <tbody>
-                    {order.items.map((item, index) => (
-                        <tr key={index}>
-                            <td className="p-2 border">{item.nombreProducto}</td>
-                            <td className="p-2 border text-right">{item.cantidad}</td>
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.precioUnidad)}</td>
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.subtotalLinea)}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            
-            <div className="flex justify-end pt-4">
-                <div className="w-64 space-y-1">
-                    <p className="flex justify-between"><span>Subtotal:</span> <span>{FORMAT_CURRENCY(order.subtotal)}</span></p>
-                    <p className="flex justify-between"><span>Envío:</span> <span>{FORMAT_CURRENCY(order.costoEnvio)}</span></p>
-                    <p className="flex justify-between"><span>Descuento:</span> <span className="text-red-600">-{FORMAT_CURRENCY(order.descuento)}</span></p>
-                    <p className="flex justify-between font-bold text-xl border-t pt-2"><span>TOTAL:</span> <span>{FORMAT_CURRENCY(order.total)}</span></p>
-                </div>
-            </div>
-            
-            <p className="mt-8">Estado: <strong>{order.estado}</strong></p>
-        </div>
+        <div className="text-sm space-y-4">
+            <h3 className="text-lg font-bold">Datos del Cliente</h3>
+            <p><strong>Cliente:</strong> {client?.nombre || order.nombreCliente}</p>
+            <p><strong>Teléfono:</strong> {client?.telefono || 'N/A'}</p>
+            <p><strong>Dirección:</strong> {client?.direccion || 'N/A'}</p>
+            
+            <h3 className="text-lg font-bold mt-6 border-t pt-4">Detalle del Pedido</h3>
+            <table className="w-full border-collapse">
+                <thead>
+                    <tr className="bg-gray-100 font-semibold">
+                        <td className="p-2 border">Producto</td>
+                        <td className="p-2 border text-right">Cantidad</td>
+                        <td className="p-2 border text-right">Precio Unitario</td>
+                        <td className="p-2 border text-right">Subtotal</td>
+                    </tr>
+                </thead>
+                <tbody>
+                    {order.items.map((item, index) => (
+                        <tr key={index}>
+                            <td className="p-2 border">{item.nombreProducto}</td>
+                            <td className="p-2 border text-right">{item.cantidad}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.precioUnidad)}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.subtotalLinea)}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            
+            <div className="flex justify-end pt-4">
+                <div className="w-64 space-y-1">
+                    <p className="flex justify-between"><span>Subtotal:</span> <span>{FORMAT_CURRENCY(order.subtotal)}</span></p>
+                    <p className="flex justify-between"><span>Envío:</span> <span>{FORMAT_CURRENCY(order.costoEnvio)}</span></p>
+                    <p className="flex justify-between"><span>Descuento:</span> <span className="text-red-600">-{FORMAT_CURRENCY(order.descuento)}</span></p>
+                    <p className="flex justify-between font-bold text-xl border-t pt-2"><span>TOTAL:</span> <span>{FORMAT_CURRENCY(order.total)}</span></p>
+                </div>
+            </div>
+            
+            <p className="mt-8">Estado: <strong>{order.estado}</strong></p>
+        </div>
     </PrintableDocument>
 ); 
 
@@ -655,270 +655,7 @@ const OrderForm = ({ model, onSave, onCancel }) => {
                         <thead>
                             <tr className="border-b text-left text-gray-600">
                                 <th className="py-2 px-1">Producto</th>
-                                <th className="py-2 px-1 w-20">Cantidad</th>
-                                <th className="py-2 px-1 w-20 text-right">Precio Un.</th>
-                                <th className="py-2 px-1 w-20 text-right">Subtotal</th>
-                                <th className="py-2 px-1 w-10"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {order.items.map((item, index) => (
-                                <tr key={item.productId || index} className="border-b hover:bg-white">
-                                    <td className="py-2 px-1 font-medium text-gray-800">{item.nombreProducto}</td>
-                                    <td className="py-2 px-1">
-                                        <input 
-                                            type="number" 
-                                            min="1"
-                                            step="1"
-                                            value={item.cantidad} 
-                                            onChange={e => handleUpdateItem(index, 'cantidad', e.target.value)} 
-                                            className="w-full p-1 border rounded text-center"
-                                        />
-                                    </td>
-                                    <td className="py-2 px-1 text-right">
-                                        <input 
-                                            type="number" 
-                                            value={item.precioUnidad} 
-                                            onChange={e => handleUpdateItem(index, 'precioUnidad', e.target.value)} 
-                                            className="w-full p-1 border rounded text-right"
-                                        />
-                                    </td>
-                                    <td className="py-2 px-1 text-right font-semibold text-gray-900">{FORMAT_CURRENCY(item.subtotalLinea)}</td>
-                                    <td className="py-2 px-1 text-right"><button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button onClick={onCancel} className="bg-gray-200 text-gray-800 hover:bg-gray-300">Cancelar</Button>
-            <Button type="submit" icon={Save}>Guardar Pedido</Button>
-        </div>
-    </form>);
-};
-
-const OrderManager = () => {
-    const { orders, clients, createOrUpdateDoc, archiveDoc } = useData();
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedItem, setSelectedItem] = useState(null);
-    const componentRef = useRef(); 
-
-    const handleSave = async (itemData) => { 
-        try {
-            await createOrUpdateDoc('orders', itemData, selectedItem?.id); 
-            setIsModalOpen(false); 
-            setSelectedItem(null); 
-        } catch (error) {
-            console.error("ERROR CRÍTICO AL GUARDAR EL PEDIDO:", error);
-            alert(`Error al guardar el pedido. Detalle: ${error.message}`);
-        }
-    };
-    const handleEdit = (item) => { setSelectedItem(item); setIsModalOpen(true); };
-    const handleAddNew = () => { setSelectedItem(null); setIsModalOpen(true); };
-    const handlePrint = () => window.print();
-    
-    const sortedOrders = useMemo(() => orders.slice().sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)), [orders]);
-    const getClientForOrder = useCallback((order) => clients.find(c => c.id === order.clienteId), [clients]);
-    
-    return (<div className="space-y-6">
-        <PageHeader title="Pedidos">
-            <Button onClick={handleAddNew} icon={Plus}>Añadir Pedido</Button>
-        </PageHeader>
-        {isModalOpen && <Modal title={(selectedItem ? "Editar " : "Nuevo ") + "Pedido"} onClose={() => setIsModalOpen(false)}>
-            <OrderForm model={selectedItem || ORDER_MODEL} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />
-        </Modal>}
-        {selectedItem && (<div className="hidden no-print">
-            <OrderPrintable ref={componentRef} order={selectedItem} client={getClientForOrder(selectedItem)} />
-        </div>)}
-        <div className="bg-white shadow-lg rounded-xl overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                        {["Cliente", "Total", "Estado", "Fecha"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {sortedOrders.map(item => {
-                        const client = getClientForOrder(item);
-                        const whatsappLink = generateWhatsAppLink(client, item);
-                        
-                        return (<tr key={item.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-4 font-semibold">{item.nombreCliente}</td>
-                            <td className="px-4 py-4 font-mono">{FORMAT_CURRENCY(item.total)}</td>
-                            <td className={`px-4 py-4 font-medium`}>
-                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${item.estado === 'Entregado' ? 'bg-green-100 text-green-800' : item.estado === 'Cancelado' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{item.estado}</span>
-                            </td>
-                            <td className="px-4 py-4 text-sm">{item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
-                            <td className="px-4 py-4 text-right space-x-2 flex justify-end">
-                                <Button onClick={() => { setSelectedItem(item); setTimeout(handlePrint, 50); }} className="!p-2 !bg-blue-500 hover:!bg-blue-600" icon={Printer} title="Imprimir / Guardar PDF"/>
-
-                                {whatsappLink && (
-                                    <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="!p-2 !bg-green-500 hover:!bg-green-600 rounded-lg text-white transition" title="Enviar por WhatsApp">
-                                        <Send className="w-4 h-4"/>
-                                    </a>
-                                )}
-                                <Button onClick={() => handleEdit(item)} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
-                                <Button onClick={() => archiveDoc('orders', item.id)} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
-                            </td>
-                        </tr>);
-                    })}
-                </tbody>
-            </table>
-        </div>
-    </div>);
-};
-
-// 8.5 Módulos de Gestión: Órdenes de Compra
-const PurchaseOrderPrintable = React.forwardRef(({ po, provider }, ref) => (
-    <PrintableDocument ref={ref} title={`ORDEN DE COMPRA N° ${po.id || 'N/A'}`}>
-        <div className="text-sm space-y-4">
-            <h3 className="text-lg font-bold">Datos del Proveedor</h3>
-            <p><strong>Proveedor:</strong> {provider?.nombre || po.nombreProveedor}</p>
-            <p><strong>Teléfono:</strong> {provider?.telefono || 'N/A'}</p>
-            <p><strong>Email:</strong> {provider?.email || 'N/A'}</p>
-            
-            <h3 className="text-lg font-bold mt-6 border-t pt-4">Detalle de Compra</h3>
-            <table className="w-full border-collapse">
-                <thead>
-                    <tr className="bg-gray-100 font-semibold">
-                        <td className="p-2 border">Producto</td>
-                        <td className="p-2 border text-right">Cantidad</td>
-                        <td className="p-2 border text-right">Costo Unitario</td>
-                        <td className="p-2 border text-right">Subtotal</td>
-                    </tr>
-                </thead>
-                <tbody>
-                    {po.items.map((item, index) => (
-                        <tr key={index}>
-                            <td className="p-2 border">{item.nombreProducto}</td>
-                            <td className="p-2 border text-right">{item.cantidad}</td>
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.costoUnidad)}</td>
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.subtotalLinea)}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            
-            <div className="flex justify-end pt-4">
-                <div className="w-64 space-y-1">
-                    <p className="flex justify-between font-bold text-xl border-t pt-2"><span>COSTO TOTAL:</span> <span>{FORMAT_CURRENCY(po.costoTotal)}</span></p>
-                </div>
-            </div>
-            
-            <p className="mt-8">Estado: <strong>{po.estado}</strong></p>
-        </div>
-    </PrintableDocument>
-);
-
-const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => {
-    const [po, setPo] = useState(model);
-    const [selectedProductId, setSelectedProductId] = useState('');
-    const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
-
-    useEffect(() => {
-        const costoTotal = po.items.reduce((sum, item) => sum + (item.subtotalLinea || 0), 0);
-        setPo(prev => ({ ...prev, costoTotal }));
-    }, [po.items]);
-
-    const handleHeaderChange = e => {
-        const { name, value, type } = e.target;
-        let newPo = { ...po, [name]: type === 'number' ? parseFloat(value) || 0 : value };
-        
-        if (name === 'proveedorId') {
-            const provider = providers.find(p => p.id === value);
-            newPo.nombreProveedor = provider ? provider.nombre : '';
-        }
-        setPo(newPo);
-    };
-
-    const handleAddItem = () => {
-        if (!selectedProduct || po.items.some(i => i.productId === selectedProductId)) return;
-
-        const newItem = {
-            productId: selectedProduct.id,
-            nombreProducto: selectedProduct.nombre,
-            cantidad: selectedProduct.udsPorCaja || 1, 
-            costoUnidad: selectedProduct.costo, 
-            subtotalLinea: selectedProduct.costo * (selectedProduct.udsPorCaja || 1),
-        };
-
-        setPo(prev => ({ ...prev, items: [...prev.items, newItem] }));
-        setSelectedProductId('');
-    };
-
-    const handleUpdateItem = (index, key, value) => {
-        const newItems = [...po.items];
-        const numericValue = parseFloat(value) || 0;
-
-        newItems[index][key] = numericValue;
-        newItems[index].subtotalLinea = newItems[index].cantidad * newItems[index].costoUnidad;
-        setPo(prev => ({ ...prev, items: newItems }));
-    };
-
-    const handleRemoveItem = (index) => {
-        const newItems = po.items.filter((_, i) => i !== index);
-        setPo(prev => ({ ...prev, items: newItems }));
-    };
-
-    const handleSubmit = e => {
-        e.preventDefault();
-        if (!po.proveedorId) return console.warn("VALIDATION: Debes seleccionar un proveedor.");
-        if (po.items.length === 0) return console.warn("VALIDATION: La orden debe tener al menos un producto.");
-        onSave(po);
-    };
-    return (<form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
-            <Select label="Proveedor" name="proveedorId" value={po.proveedorId} onChange={handleHeaderChange} required>
-                <option value="">Seleccione un Proveedor</option>
-                {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
-            <Select label="Estado" name="estado" value={po.estado} onChange={handleHeaderChange}>
-                {['Pendiente', 'Recibido', 'Cancelado'].map(s => <option key={s}>{s}</option>)}
-            </Select>
-        </div>
-
-        <h4 className="text-lg font-semibold text-gray-700">Productos a Comprar</h4>
-        <div className="flex space-x-2">
-            <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
-                <option value="">Añadir Producto...</option>
-                {products.filter(p => !po.items.some(i => i.productId === selectedProductId)).map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-            </Select>
-            <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
-        </div>
-
-        {po.items.length > 0 && (
-            <div className="bg-gray-50 p-3 rounded-lg overflow-x-auto">
-                <table className="min-w-full text-sm">
-                    <thead>
-                        <tr className="border-b text-left text-gray-600">
-                            <th className="py-2 px-1">Producto</th>
-                            <th className="py-2 px-1 w-20">Cantidad</th>
-                            <th className="py-2 px-1 w-20 text-right">Costo Un.</th>
-                            <th className="py-2 px-1 w-20 text-right">Subtotal</th>
-                            <th className="py-2 px-1 w-10"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {po.items.map((item, index) => (
-                            <tr key={item.productId || index} className="border-b hover:bg-white">
-                                <td className="py-2 px-1 font-medium text-gray-800">{item.nombreProducto}</td>
-                                <td className="py-2 px-1">
-                                    <input 
-                                        type="number" 
-                                        min="1"
-                                        step="1"
-                                        value={item.cantidad} 
-                                        onChange={e => handleUpdateItem(index, 'cantidad', e.target.value)} 
-                                        className="w-full p-1 border rounded text-center"
-                                    />
-                                </td>
-                                <td className="py-2 px-1 text-right">
-                                    <input 
-            189| const AppController = () => {
+    189| const AppController = () => {
 190|     const { userId, isAuthReady, loading } = useData();
 191|     
 192|     if (!isAuthReady) {
