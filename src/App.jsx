@@ -125,12 +125,13 @@ const DataProvider = ({ children }) => {
 
     const logout = () => signOut(auth);
     
-    // FUNCIÓN DE GUARDADO/ACTUALIZACIÓN CENTRAL (CON FALLBACK SIMPLE PARA COMPILACIÓN)
+    // FUNCIÓN DE GUARDADO/ACTUALIZACIÓN CENTRAL (CORREGIDA PARA FORZAR ESCRITURA Y DIAGNÓSTICO)
     const createOrUpdateDoc = useCallback(async (collectionName, data, id) => {
-        // APLICACIÓN DE LA REGLA: Si el usuario o la DB no están listos, fallamos con DEBUG, pero no rompemos la app
         if (!userId || !db) {
-            console.error("DEBUG: Usuario no autenticado o DB no inicializada. No se puede guardar.");
-            return;
+            // Se mantiene el console.error para diagnóstico
+            console.error("DEBUG: Fallo de createOrUpdateDoc. Usuario no autenticado o DB no inicializada.");
+            // Lanzamos un error explícito si la DB no está lista
+            throw new Error("DB_NOT_READY"); 
         } 
         
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
@@ -247,15 +248,17 @@ const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeade
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     
-    // VOLVEMOS A LA LÓGICA SIMPLE QUE COMPILABA (PERO NO GUARDABA)
+    // CORRECCIÓN: Ahora incluye try...catch y diagnóstico
     const handleSave = async (itemData) => { 
         try {
             if (!createOrUpdateDoc) return; 
             await createOrUpdateDoc(collectionName, itemData, selectedItem?.id);
             setIsModalOpen(false); 
             setSelectedItem(null);
+            console.log(`SUCCESS: ${title.slice(0, -1)} guardado correctamente.`);
         } catch (error) {
-            console.error("DEBUG: Fallo al guardar (posiblemente DB no lista o error de permisos):", error);
+            console.error(`ERROR CRÍTICO AL GUARDAR ${title.slice(0, -1)}:`, error);
+            alert(`Error al guardar. Revise la consola del navegador para el error de Firebase. Detalle: ${error.message}`);
         }
     };
 
