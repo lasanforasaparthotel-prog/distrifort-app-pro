@@ -971,7 +971,98 @@ const PurchaseOrderManager = () => {
 
 
 // 8.6 Módulos de Listado, Búsqueda y Herramientas
-const PriceListManager = () => { /* ... */ return (<div>{/* ... */}</div>); };
+const PriceListManager = () => {
+    const { products, clients } = useData();
+    const [selectedClientId, setSelectedClientId] = useState('');
+    const componentRef = useRef(); 
+    
+    const client = useMemo(() => clients.find(c => c.id === selectedClientId), [clients, selectedClientId]);
+    
+    const handlePrint = () => window.print();
+
+    const generatePriceListMessage = useCallback((client, products) => {
+        if (!client) return { whatsapp: null, email: null };
+
+        let message = `¡Hola ${client.nombre}!\n\n`;
+        message += `Adjunto la lista de precios actualizada de DistriFort, aplicada a tu régimen *${client.regimen}*.\n\n`;
+        message += `*Precios Principales:*\n`;
+        
+        products.forEach(p => {
+            message += `- ${p.nombre}: ${FORMAT_CURRENCY(p.precioUnidad)}\n`;
+        });
+        
+        message += `\n*Recuerda:* La lista de precios completa está adjunta en PDF. ¡Esperamos tu pedido!`;
+
+        const subject = `Lista de Precios Actualizada para ${client.nombre}`;
+        const cleanPhone = client.telefono ? client.telefono.replace(/\D/g, '') : null;
+        const phoneNumber = cleanPhone && cleanPhone.length >= 10 ? `549${cleanPhone}` : cleanPhone;
+        
+        return { 
+            whatsapp: phoneNumber ? `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}` : null,
+            email: client.email ? `mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}` : null,
+        };
+    }, [products]);
+
+    const communicationLinks = useMemo(() => {
+        return client ? generatePriceListMessage(client, products) : { whatsapp: null, email: null };
+    }, [client, products, generatePriceListMessage]);
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Lista de Precios">
+                <Select label="Seleccionar Cliente" name="client" value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)}>
+                    <option value="">-- Seleccionar para Personalizar --</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.regimen})</option>)}
+                </Select>
+            </PageHeader>
+
+            {client && (
+                <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
+                    <h3 className="text-xl font-bold text-gray-800">Precios para {client.nombre}</h3>
+                    <div className="flex space-x-3 no-print">
+                        <Button onClick={handlePrint} icon={Printer} className="!bg-blue-500 hover:!bg-blue-600">Imprimir / Guardar PDF</Button>
+                        {communicationLinks.whatsapp && (
+                            <a href={communicationLinks.whatsapp} target="_blank" rel="noopener noreferrer">
+                                <Button icon={Send} className="!bg-green-500 hover:!bg-green-600">Enviar WhatsApp</Button>
+                            </a>
+                        )}
+                        {communicationLinks.email && (
+                            <a href={communicationLinks.email} target="_blank" rel="noopener noreferrer">
+                                <Button icon={Mail} className="!bg-gray-500 hover:!bg-gray-600">Enviar Email</Button>
+                            </a>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-50 p-3 rounded-lg overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    {["Producto", "Bodega", "Precio Unitario", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {products.map(p => (
+                                    <tr key={p.id}>
+                                        <td className="px-4 py-4 font-semibold">{p.nombre}</td>
+                                        <td className="px-4 py-4">{p.bodega}</td>
+                                        <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
+                                        <td className="px-4 py-4 text-right">{p.stockTotal}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+            
+            {client && (
+                <div className="hidden no-print">
+                    {/* Componente de impresión simulado */}
+                </div>
+            )}
+        </div>
+    );
+};
 const GlobalSearch = () => { /* ... */ return (<div>{/* ... */}</div>); };
 const ShippingQuoter = () => { /* ... */ return (<div>{/* ... */}</div>); };
 const ProfitCalculator = () => { /* ... */ return (<div>{/* ... */}</div>); };
