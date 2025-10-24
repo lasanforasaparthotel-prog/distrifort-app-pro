@@ -125,13 +125,11 @@ const DataProvider = ({ children }) => {
 
     const logout = () => signOut(auth);
     
-    // FUNCIÓN DE GUARDADO/ACTUALIZACIÓN CENTRAL (CORREGIDA PARA FORZAR ESCRITURA Y DIAGNÓSTICO)
+    // FUNCIÓN DE GUARDADO/ACTUALIZACIÓN CENTRAL (VERSIÓN ESTABLE Y DE DIAGNÓSTICO)
     const createOrUpdateDoc = useCallback(async (collectionName, data, id) => {
         if (!userId || !db) {
-            // Se mantiene el console.error para diagnóstico
-            console.error("DEBUG: Fallo de createOrUpdateDoc. Usuario no autenticado o DB no inicializada.");
-            // Lanzamos un error explícito si la DB no está lista
-            throw new Error("DB_NOT_READY"); 
+            console.error("DEBUG: Usuario no autenticado o DB no inicializada. No se puede guardar.");
+            return;
         } 
         
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
@@ -1066,13 +1064,423 @@ const PriceListManager = () => {
         </div>
     );
 };
-const GlobalSearch = () => { /* ... */ return (<div>{/* ... */}</div>); };
-const ShippingQuoter = () => { /* ... */ return (<div>{/* ... */}</div>); };
-const ProfitCalculator = () => { /* ... */ return (<div>{/* ... */}</div>); };
-const AIChat = () => { /* ... */ return (<div>{/* ... */}</div>); };
-const PromotionGenerator = () => { /* ... */ return (<div>{/* ... */}</div>); };
-const Tools = () => { /* ... */ return (<div>{/* ... */}</div>); };
-const PriceListImporter = () => { /* ... */ return (<div>{/* ... */}</div>); };
+const GlobalSearch = () => { 
+    const { products, orders, clients } = useData();
+    const [term, setTerm] = useState('');
+    const results = useMemo(() => {
+        if (!term) return {};
+        const lowerTerm = term.toLowerCase();
+        return {
+            products: products.filter(p => p.nombre.toLowerCase().includes(lowerTerm)),
+            clients: clients.filter(c => c.nombre.toLowerCase().includes(lowerTerm)),
+            orders: orders.filter(o => o.nombreCliente.toLowerCase().includes(lowerTerm)),
+        };
+    }, [term, products, clients, orders]);
+    return (<div className="space-y-6"><PageHeader title="Búsqueda Global" /><Input placeholder="Buscar productos, clientes, pedidos..." value={term} onChange={e => setTerm(e.target.value)} />{term && Object.entries(results).map(([key, value]) => value.length > 0 && (<div key={key} className="bg-white p-4 rounded-xl shadow-md"><h3 className="text-lg font-bold text-indigo-600 mb-2">{key.charAt(0).toUpperCase() + key.slice(1)} ({value.length})</h3><ul className="space-y-1">{value.map(item => <li key={item.id} className="text-gray-700 p-2 border-b last:border-b-0 hover:bg-gray-50 rounded-md">{item.nombre || item.nombreCliente}</li>)}</ul></div>))}</div>);
+};
+const ShippingQuoter = () => { 
+    const [distance, setDistance] = useState(0);
+    const [weight, setWeight] = useState(0);
+
+    const { totalCost, baseRate, ratePerKm, ratePerKg } = useMemo(() => {
+        const BASE_RATE = 1500; 
+        const RATE_PER_KM = 25; 
+        const RATE_PER_KG = 5; 
+        
+        const dist = parseFloat(distance) || 0;
+        const wgt = parseFloat(weight) || 0;
+        
+        const cost = BASE_RATE + (dist * RATE_PER_KM) + (wgt * RATE_PER_KG);
+
+        return { 
+            totalCost: cost, 
+            baseRate: BASE_RATE,
+            ratePerKm: RATE_PER_KM,
+            ratePerKg: RATE_PER_KG
+        };
+    }, [distance, weight]);
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Calculadora de Costos de Envío">
+                <p className="text-sm text-gray-500">Estimación basada en distancia y peso.</p>
+            </PageHeader>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md space-y-4">
+                    <h4 className="text-xl font-semibold text-gray-700 flex items-center space-x-2"><MapPin className="w-6 h-6"/><span>Parámetros del Envío</span></h4>
+                    <Input label="Distancia del Envío (km)" type="number" value={distance} onChange={e => setDistance(e.target.value)} placeholder="ej: 150" required/>
+                    <Input label="Peso Total de la Carga (kg)" type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="ej: 500" required/>
+                    <div className="text-sm text-gray-600 pt-4 border-t">
+                        <p className="font-semibold">Tarifas usadas:</p>
+                        <p>Base: {FORMAT_CURRENCY(baseRate)}</p>
+                        <p>Por km: {FORMAT_CURRENCY(ratePerKm)}</p>
+                        <p>Por kg: {FORMAT_CURRENCY(ratePerKg)}</p>
+                    </div>
+                </div>
+                
+                <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-md space-y-4 border-l-4 border-indigo-600">
+                    <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2">
+                        <Truck className="w-6 h-6" />
+                        <span>Costo Estimado</span>
+                    </h4>
+                    <p className="text-5xl font-bold text-gray-800">{FORMAT_CURRENCY(totalCost)}</p>
+                    
+                    <div className="text-base text-gray-700 space-y-1 pt-4 border-t">
+                        <p>Costo por Distancia ({distance} km): <span className="font-semibold">{FORMAT_CURRENCY(distance * ratePerKm)}</span></p>
+                        <p>Costo por Peso ({weight} kg): <span className="font-semibold">{FORMAT_CURRENCY(weight * ratePerKg)}</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+const ProfitCalculator = () => { 
+    const [cost, setCost] = useState(0);
+    const [price, setPrice] = useState(0);
+
+    const { margin, markup, marginPercentage, markupPercentage } = useMemo(() => {
+        const c = parseFloat(cost) || 0;
+        const p = parseFloat(price) || 0;
+        
+        const profit = p - c;
+        
+        const marginP = p > 0 ? (profit / p) : 0;
+        
+        const markupP = c > 0 ? (profit / c) : 0;
+
+        return {
+            margin: profit,
+            markup: profit,
+            marginPercentage: marginP * 100,
+            markupPercentage: markupP * 100
+        };
+    }, [cost, price]);
+
+    const handleChange = (setter) => (e) => setter(parseFloat(e.target.value) || 0);
+
+    const dataCards = [
+        { title: "Ganancia (Margen)", value: FORMAT_CURRENCY(margin), icon: DollarSign, color: "green" },
+        { title: "Margen Bruto (%)", value: `${marginPercentage.toFixed(2)}%`, icon: TrendingUp, color: "blue" },
+        { title: "Markup (%)", value: `${markupPercentage.toFixed(2)}%`, icon: TrendingUp, color: "indigo" },
+    ];
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
+                <h4 className="text-xl font-semibold text-gray-700">Calcular Rentabilidad</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label="Costo del Producto ($)" type="number" value={cost} onChange={handleChange(setCost)} required/>
+                    <Input label="Precio de Venta ($)" type="number" value={price} onChange={handleChange(setPrice)} required/>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {dataCards.map(card => (
+                    <Card key={card.title} title={card.title} value={card.value} icon={card.icon} color={card.color}/>
+                ))}
+            </div>
+        </div>
+    );
+};
+const AIChat = () => { 
+    const [prompt, setPrompt] = useState('');
+    const [response, setResponse] = useState('Pregunta al asistente sobre tendencias del mercado, mejores prácticas de distribución o análisis de tu inventario.');
+    const [loading, setLoading] = useState(false);
+
+    const handleChatSubmit = async (e) => {
+        e.preventDefault();
+        if (!prompt.trim()) return;
+
+        setLoading(true);
+        setResponse('...Generando respuesta de IA...');
+        
+        const context = "Actúa como un analista de negocios experto en distribución de bebidas. Ofrece consejos concisos y prácticos. Limita la respuesta a un máximo de 200 palabras.";
+        const fullPrompt = `${context} -- Pregunta del usuario: ${prompt}`;
+        
+        const result = await secureGeminiFetch(fullPrompt);
+        
+        setResponse(result);
+        setLoading(false);
+        setPrompt('');
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-md space-y-4 flex flex-col h-full min-h-[50vh]">
+            <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2"><BrainCircuit className="w-6 h-6"/><span>Asistente de Distribución IA</span></h4>
+            
+            <div className="flex-1 overflow-y-auto p-3 bg-gray-50 rounded-lg whitespace-pre-wrap text-sm text-gray-800">
+                {loading ? <PageLoader text="Analizando..." /> : response}
+            </div>
+
+            <form onSubmit={handleChatSubmit} className="flex space-x-3 pt-4 border-t">
+                <Input name="chatPrompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Ej: ¿Cuál es la mejor estrategia para rotar el stock de vinos rojos?" className="flex-1"/>
+                <Button type="submit" disabled={!prompt.trim() || loading} icon={Send}>
+                    {loading ? '...' : 'Enviar'}
+                </Button>
+            </form>
+        </div>
+    );
+};
+const PromotionGenerator = () => { 
+    const [prompt, setPrompt] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleGenerateImage = async (e) => {
+        e.preventDefault();
+        if (!prompt.trim()) return;
+
+        setLoading(true);
+        setError('');
+        setImageUrl('');
+
+        const stylePrompt = `, digital art, vibrant colors, social media ready, professional, wine distribution focus.`;
+        const fullPrompt = `${prompt}${stylePrompt}`;
+
+        try {
+            const url = await secureGeminiFetch(fullPrompt, true); 
+            setImageUrl(url);
+        } catch (e) {
+            setError('Error al generar la imagen. Intenta con una descripción más específica.');
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDownload = () => {
+        if (imageUrl) {
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = 'promo_distrifort_ia.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    const handleShare = () => {
+        if (!imageUrl) return;
+        
+        const shareMessage = encodeURIComponent("¡Nueva Promoción de DistriFort!\n\nMira esta imagen especial que creamos para ti. Descárgala desde el sitio web.");
+
+        const whatsappLink = `https://wa.me/5491112345678?text=${shareMessage}`;
+        window.open(whatsappLink, '_blank');
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
+                <h4 className="text-xl font-semibold text-indigo-600 flex items-center space-x-2"><ImageIcon className="w-6 h-6"/><span>Generador de Promociones Visuales (IA)</span></h4>
+                <p className="text-sm text-gray-600">Describe la promoción que deseas generar para redes sociales (Ej: "Una botella de vino tinto Malbec en un paisaje nevado con el texto 50% OFF").</p>
+                
+                <form onSubmit={handleGenerateImage} className="flex space-x-3 pt-2">
+                    <Input name="imagePrompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe tu imagen promocional..." className="flex-1" required/>
+                    <Button type="submit" disabled={!prompt.trim() || loading} icon={ImageIcon}>
+                        {loading ? 'Creando...' : 'Generar Imagen'}
+                    </Button>
+                </form>
+
+                {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-xl">
+                <h4 className="text-lg font-semibold text-gray-700 mb-4">Resultado</h4>
+                {loading ? (
+                    <PageLoader text="Dibujando promoción..." />
+                ) : imageUrl ? (
+                    <div className="space-y-4">
+                        <img src={imageUrl} alt="Promoción Generada por IA" className="w-full max-w-lg mx-auto rounded-xl shadow-lg border" />
+                        <div className="flex justify-center space-x-4">
+                            <Button onClick={handleDownload} className="!bg-blue-500 hover:!bg-blue-600">Descargar PNG</Button>
+                            <Button onClick={handleShare} icon={Send} className="!bg-green-500 hover:!bg-green-600">Compartir (WhatsApp)</Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center text-gray-500 py-10">La imagen generada aparecerá aquí.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+const Tools = () => { /* ... */ 
+    const [subPage, setSubPage] = useState('calculator'); 
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Herramientas de Distribución">
+                <div className="flex space-x-3">
+                    <Button onClick={() => setSubPage('calculator')} className={subPage === 'calculator' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'} icon={DollarSign}>
+                        Calculadora
+                    </Button>
+                    <Button onClick={() => setSubPage('ai')} className={subPage === 'ai' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'} icon={BrainCircuit}>
+                        Asistente IA
+                    </Button>
+                    <Button onClick={() => setSubPage('promo')} className={subPage === 'promo' ? '' : '!bg-gray-200 !text-gray-700 hover:!bg-gray-300'} icon={ImageIcon}>
+                        Promo (IA)
+                    </Button>
+                </div>
+            </PageHeader>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {subPage === 'calculator' && <ProfitCalculator />}
+                {subPage === 'ai' && <AIChat />}
+                {subPage === 'promo' && <PromotionGenerator />}
+            </div>
+        </div>
+    );
+};
+const PriceListImporter = () => { 
+    const { providers, products, createOrUpdateDoc } = useData();
+    const [providerId, setProviderId] = useState('');
+    const [listText, setListText] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [importLog, setImportLog] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!providerId) {
+            setImportLog("Error: Debes seleccionar un proveedor.");
+            return;
+        }
+        if (!listText.trim()) {
+            setImportLog("Error: El campo de texto de la lista de precios está vacío.");
+            return;
+        }
+
+        setLoading(true);
+        setImportLog("1. Estructurando datos con IA...");
+
+        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo" y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+        
+        let jsonResponse;
+        try {
+            const model = 'gemini-2.5-flash-preview-05-20';
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            
+            if (!apiKey) throw new Error("API Key de Gemini no configurada para la importación.");
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: aiPrompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    "nombre": { "type": "STRING" },
+                                    "costo": { "type": "NUMBER" },
+                                    "precioUnidad": { "type": "NUMBER" }
+                                },
+                                "propertyOrdering": ["nombre", "costo", "precioUnidad"]
+                            }
+                        }
+                    }
+                }),
+            });
+            
+            if (!response.ok) throw new Error("Fallo en la llamada a la API de IA.");
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (!jsonText) throw new Error("La IA no devolvió una respuesta JSON válida.");
+            
+            jsonResponse = JSON.parse(jsonText);
+            setImportLog("2. Datos estructurados correctamente. Procesando importación...");
+        } catch (e) {
+            console.error("AI/JSON Parsing Error:", e);
+            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro. (Detalle: ${e.message})`);
+            setLoading(false);
+            return;
+        }
+
+        // 2. Procesar e importar los datos
+        const providerName = providers.find(p => p.id === providerId)?.nombre || 'Desconocido';
+        let updatesCount = 0;
+        
+        const errors = [];
+
+        for (const item of jsonResponse) {
+            if (!item.nombre || item.costo === undefined || item.precioUnidad === undefined) {
+                errors.push(`Saltando ítem incompleto: ${item.nombre}`);
+                continue;
+            }
+            
+            const existingProduct = products.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim());
+
+            if (existingProduct) {
+                // Actualizar producto existente (solo costo/precio)
+                await createOrUpdateDoc('products', {
+                    costo: parseFloat(item.costo) || 0,
+                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                }, existingProduct.id);
+                updatesCount++;
+            } else {
+                // Crear nuevo producto (con valores del modelo por defecto)
+                await createOrUpdateDoc('products', {
+                    ...PRODUCT_MODEL,
+                    nombre: item.nombre,
+                    costo: parseFloat(item.costo) || 0,
+                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                    proveedorId: providerId, // Usamos el ID del proveedor
+                    bodega: `${providerName} / Listado`, // Bodega del proveedor
+                });
+                updatesCount++;
+            }
+        }
+
+        setImportLog(`Éxito: Se procesaron ${updatesCount} ítems. Productos creados/actualizados en el Inventario.`);
+        setLoading(false);
+        setListText('');
+    };
+
+    return (
+        <div className="space-y-6">
+            <PageHeader title="Importador de Listas de Precios (IA)">
+                <p className="text-sm text-gray-500">Utiliza la IA para convertir texto plano de listas de precios en datos de productos.</p>
+            </PageHeader>
+            
+            <div className="bg-white p-6 rounded-xl shadow-md space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <Select label="Proveedor de la Lista" name="providerId" value={providerId} onChange={e => setProviderId(e.target.value)} required>
+                        <option value="">-- Seleccione el Proveedor --</option>
+                        {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </Select>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pegar Contenido de la Lista (PDF/Excel)</label>
+                        <textarea 
+                            value={listText}
+                            onChange={e => setListText(e.target.value)}
+                            rows="10"
+                            placeholder="Copia y pega el texto de tu lista de precios aquí. Asegúrate de incluir el nombre del producto y su costo/precio."
+                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                            required
+                        />
+                    </div>
+                    
+                    <Button type="submit" icon={Upload} disabled={loading || !providerId || !listText.trim()}>
+                        {loading ? 'Procesando con IA...' : 'Importar Productos y Precios'}
+                    </Button>
+                </form>
+
+                {importLog && (
+                    <div className={`p-4 rounded-lg text-sm ${importLog.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        <h4 className="font-bold">Registro de Importación:</h4>
+                        <p>{importLog}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 // CORRECCIÓN 1: DEFINICIÓN DEL DASHBOARD
 const Dashboard = ({ setCurrentPage }) => {
