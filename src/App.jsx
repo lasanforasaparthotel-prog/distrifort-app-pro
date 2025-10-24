@@ -171,7 +171,7 @@ const Select = ({ label, name, value, onChange, children, required = false }) =>
 const Card = ({ title, value, icon: Icon, color = 'indigo', onClick }) => (<div onClick={onClick} className={`bg-white p-4 rounded-xl shadow-md border border-gray-100 flex-1 ${onClick ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''}`}><div className="flex items-center justify-between"><p className="text-sm font-medium text-gray-500">{title}</p><Icon className={`w-6 h-6 text-${color}-500`} /></div><p className="text-2xl md:text-3xl font-bold mt-1 text-gray-800">{value}</p></div>);
 const PageLoader = ({ text }) => (<div className="min-h-screen flex flex-col items-center justify-center text-gray-500"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div><p className="mt-2">{text}</p></div>);
 const PageHeader = ({ title, children }) => (<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><h2 className="text-2xl md:text-3xl font-bold text-gray-800">{title}</h2><div>{children}</div></div>);
-const GoogleIcon = () => (<svg className="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.335,44,30.038,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>);
+const GoogleIcon = () => (<svg className="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19-5.238C42.022,35.335,44,30.038,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>);
 
 // --- FUNCIÓN GENÉRICA PARA IMPRIMIR ---
 const PrintableDocument = React.forwardRef(({ children, title, logoText = "DistriFort" }, ref) => (
@@ -523,133 +523,133 @@ const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
 ); 
 
 const OrderForm = ({ model, onSave, onCancel }) => {
-    const { clients, products, db, auth } = useData(); 
-    const [order, setOrder] = useState(model);
-    const [selectedProductId, setSelectedProductId] = useState('');
-    const selectedClient = useMemo(() => clients.find(c => c.id === order.clienteId), [order.clienteId, clients]);
-    const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
+    const { clients, products, db, auth } = useData(); 
+    const [order, setOrder] = useState(model);
+    const [selectedProductId, setSelectedProductId] = useState('');
+    const selectedClient = useMemo(() => clients.find(c => c.id === order.clienteId), [order.clienteId, clients]);
+    const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
 
-    useEffect(() => {
-        const subtotal = order.items.reduce((sum, item) => sum + (item.subtotalLinea || 0), 0);
-        const total = subtotal + (order.costoEnvio || 0) - (order.descuento || 0);
-        setOrder(prev => ({ ...prev, subtotal, total }));
-    }, [order.items, order.costoEnvio, order.descuento]);
+    useEffect(() => {
+        const subtotal = order.items.reduce((sum, item) => sum + (item.subtotalLinea || 0), 0);
+        const total = subtotal + (order.costoEnvio || 0) - (order.descuento || 0);
+        setOrder(prev => ({ ...prev, subtotal, total }));
+    }, [order.items, order.costoEnvio, order.descuento]);
 
-    const handleHeaderChange = e => {
+    const handleHeaderChange = e => {
         const { name, value, type } = e.target;
         let newOrder = { ...order, [name]: type === 'number' ? parseFloat(value) || 0 : value };
-        
+        
         if (name === 'clienteId') {
             const client = clients.find(c => c.id === value);
             newOrder.nombreCliente = client ? client.nombre : '';
         }
         setOrder(newOrder);
     };
-    const handleAddItem = () => {
-        if (!selectedProduct || order.items.some(i => i.productId === selectedProductId)) return;
+    const handleAddItem = () => {
+        if (!selectedProduct || order.items.some(i => i.productId === selectedProductId)) return;
 
-        const price = selectedClient?.regimen === 'Mayorista' && selectedProduct.precioCaja > 0 
-            ? selectedProduct.precioCaja 
-            : selectedProduct.precioUnidad;
+        const price = selectedClient?.regimen === 'Mayorista' && selectedProduct.precioCaja > 0 
+            ? selectedProduct.precioCaja 
+            : selectedProduct.precioUnidad;
 
-        const newItem = {
-            productId: selectedProduct.id,
-            nombreProducto: selectedProduct.nombre,
-            cantidad: 1,
-            precioUnidad: price,
-            subtotalLinea: price * 1,
-        };
+        const newItem = {
+            productId: selectedProduct.id,
+            nombreProducto: selectedProduct.nombre,
+            cantidad: 1,
+            precioUnidad: price,
+            subtotalLinea: price * 1,
+        };
 
-        setOrder(prev => ({ ...prev, items: [...prev.items, newItem] }));
-        setSelectedProductId('');
-    };
-    const handleUpdateItem = (index, key, value) => {
-        const newItems = [...order.items];
-        const numericValue = parseFloat(value) || 0;
+        setOrder(prev => ({ ...prev, items: [...prev.items, newItem] }));
+        setSelectedProductId('');
+    };
+    const handleUpdateItem = (index, key, value) => {
+        const newItems = [...order.items];
+        const numericValue = parseFloat(value) || 0;
 
-        newItems[index][key] = numericValue;
-        newItems[index].subtotalLinea = newItems[index].cantidad * newItems[index].precioUnidad;
-        setOrder(prev => ({ ...prev, items: newItems }));
-    };
-    const handleRemoveItem = (index) => {
-        const newItems = order.items.filter((_, i) => i !== index);
-        setOrder(prev => ({ ...prev, items: newItems }));
-    };
+        newItems[index][key] = numericValue;
+        newItems[index].subtotalLinea = newItems[index].cantidad * newItems[index].precioUnidad;
+        setOrder(prev => ({ ...prev, items: newItems }));
+    };
+    const handleRemoveItem = (index) => {
+        const newItems = order.items.filter((_, i) => i !== index);
+        setOrder(prev => ({ ...prev, items: newItems }));
+    };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!order.clienteId) return console.warn("VALIDATION: Debes seleccionar un cliente."); 
-        if (order.items.length === 0) return console.warn("VALIDATION: El pedido debe tener al menos un producto.");
-        
-        const batch = writeBatch(db);
-        const userId = auth.currentUser.uid;
-        
-        // 1. Prepara Referencias y el ID del Pedido
-        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${userId}/orders`)).id; 
-        const orderRef = doc(db, `/artifacts/${appId}/users/${userId}/orders`, orderId);
-        const clientRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, order.clienteId);
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!order.clienteId) return console.warn("VALIDATION: Debes seleccionar un cliente."); 
+        if (order.items.length === 0) return console.warn("VALIDATION: El pedido debe tener al menos un producto.");
+        
+        const batch = writeBatch(db);
+        const userId = auth.currentUser.uid;
+        
+        // 1. Prepara Referencias y el ID del Pedido
+        const orderId = order.id || doc(collection(db, `/artifacts/${appId}/users/${userId}/orders`)).id; 
+        const orderRef = doc(db, `/artifacts/${appId}/users/${userId}/orders`, orderId);
+        const clientRef = doc(db, `/artifacts/${appId}/users/${userId}/clients`, order.clienteId);
 
-        // 2. Guarda/Actualiza el Documento del Pedido
-        batch.set(orderRef, { 
-            ...order, 
-            timestamp: serverTimestamp(),
-            subtotal: parseFloat(order.subtotal) || 0,
-            total: parseFloat(order.total) || 0,
-            costoEnvio: parseFloat(order.costoEnvio) || 0,
-            descuento: parseFloat(order.descuento) || 0,
-            userId: userId, 
-            id: orderId
-        }, { merge: true });
+        // 2. Guarda/Actualiza el Documento del Pedido
+        batch.set(orderRef, { 
+            ...order, 
+            timestamp: serverTimestamp(),
+            subtotal: parseFloat(order.subtotal) || 0,
+            total: parseFloat(order.total) || 0,
+            costoEnvio: parseFloat(order.costoEnvio) || 0,
+            descuento: parseFloat(order.descuento) || 0,
+            userId: userId, 
+            id: orderId
+        }, { merge: true });
 
-        // 3. Actualiza el Saldo Pendiente del Cliente
-        const newSaldoPendiente = (clients.find(c => c.id === order.clienteId)?.saldoPendiente || 0) + (order.total || 0);
-        batch.update(clientRef, { saldoPendiente: newSaldoPendiente });
+        // 3. Actualiza el Saldo Pendiente del Cliente
+        const newSaldoPendiente = (clients.find(c => c.id === order.clienteId)?.saldoPendiente || 0) + (order.total || 0);
+        batch.update(clientRef, { saldoPendiente: newSaldoPendiente });
 
-        // 4. Actualiza el Stock de los Productos
-        for (const item of order.items) {
-            const product = products.find(p => p.id === item.productId);
-            if (product) {
-                const productRef = doc(db, `/artifacts/${appId}/users/${userId}/products`, item.productId);
-                const newStockTotal = product.stockTotal - item.cantidad;
-                batch.update(productRef, { stockTotal: newStockTotal });
-            }
-        }
+        // 4. Actualiza el Stock de los Productos
+        for (const item of order.items) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+                const productRef = doc(db, `/artifacts/${appId}/users/${userId}/products`, item.productId);
+                const newStockTotal = product.stockTotal - item.cantidad;
+                batch.update(productRef, { stockTotal: newStockTotal });
+            }
+        }
 
-        try {
-            // EJECUTA LA TRANSACCIÓN
-            await batch.commit();
-            console.log("SUCCESS: Pedido Guardado, Saldo y Stock Actualizados!");
-            onSave({ ...order, id: orderId }); // Llama al handleSave del ManagerComponent
-        } catch (e) {
-            console.error("ERROR CRÍTICO AL EJECUTAR LA TRANSACCIÓN:", e);
-            alert(`Error de Transacción Firestore. Detalle: ${e.message}. El guardado ha fallado.`);
-        }
-    };
-    return (<form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
-             <Select label="Cliente" name="clienteId" value={order.clienteId} onChange={handleHeaderChange} required>
-                <option value="">Seleccione un Cliente</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </Select>
-            <Select label="Estado" name="estado" value={order.estado} onChange={handleHeaderChange}>
-                {['Pendiente', 'Confirmado', 'Enviado', 'Entregado', 'Cancelado'].map(s => <option key={s}>{s}</option>)}
-            </Select>
-            <Input label="Costo de Envío ($)" name="costoEnvio" type="number" value={order.costoEnvio} onChange={handleHeaderChange} />
-            <Input label="Descuento ($)" name="descuento" type="number" value={order.descuento} onChange={handleHeaderChange} />
-        </div>
+        try {
+            // EJECUTA LA TRANSACCIÓN
+            await batch.commit();
+            console.log("SUCCESS: Pedido Guardado, Saldo y Stock Actualizados!");
+            onSave({ ...order, id: orderId }); // Llama al handleSave del ManagerComponent
+        } catch (e) {
+            console.error("ERROR CRÍTICO AL EJECUTAR LA TRANSACCIÓN:", e);
+            alert(`Error de Transacción Firestore. Detalle: ${e.message}. El guardado ha fallado.`);
+        }
+    };
+    return (<form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+             <Select label="Cliente" name="clienteId" value={order.clienteId} onChange={handleHeaderChange} required>
+                <option value="">Seleccione un Cliente</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </Select>
+            <Select label="Estado" name="estado" value={order.estado} onChange={handleHeaderChange}>
+                {['Pendiente', 'Confirmado', 'Enviado', 'Entregado', 'Cancelado'].map(s => <option key={s}>{s}</option>)}
+            </Select>
+            <Input label="Costo de Envío ($)" name="costoEnvio" type="number" value={order.costoEnvio} onChange={handleHeaderChange} />
+            <Input label="Descuento ($)" name="descuento" type="number" value={order.descuento} onChange={handleHeaderChange} />
+        </div>
 
-        <h4 className="text-lg font-semibold text-gray-700">Productos</h4>
-        <div className="flex space-x-2">
-            <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
-                <option value="">Añadir Producto...</option>
-                {products.filter(p => !order.items.some(i => i.productId === p.id)).map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre} ({p.stockTotal} en stock)</option>
-                ))}
-            </Select>
-            <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
-        </div>
-        
-        {order.items.length > 0 && (
+        <h4 className="text-lg font-semibold text-gray-700">Productos</h4>
+        <div className="flex space-x-2">
+            <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
+                <option value="">Añadir Producto...</option>
+                {products.filter(p => !order.items.some(i => i.productId === p.id)).map(p => (
+                    <option key={p.id} value={p.id}>{p.nombre} ({p.stockTotal} en stock)</option>
+                ))}
+            </Select>
+            <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
+        </div>
+        
+        {order.items.length > 0 && (
                 <div className="bg-gray-50 p-3 rounded-lg overflow-x-auto">
                     <table className="min-w-full text-sm">
                         <thead>
@@ -898,6 +898,26 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
                             <th className="py-2 px-1">Producto</th>
                             <th className="py-2 px-1 w-20">Cantidad</th>
                             <th className="py-2 px-1 w-20 text-right">Costo Un.</th>
+                            <th className="py-2 px-1 w-20 text-right">Subtotal</th>
+                            <th className="py-2 px-1 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {po.items.map((item, index) => (
+                            <tr key={item.productId || index} className="border-b hover:bg-white">
+                                <td className="py-2 px-1 font-medium text-gray-800">{item.nombreProducto}</td>
+                                <td className="py-2 px-1">
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        step="1"
+                                        value={item.cantidad} 
+                                        onChange={e => handleUpdateItem(index, 'cantidad', e.target.value)} 
+                                        className="w-full p-1 border rounded text-center"
+                                    />
+                                </td>
+                                <td className="py-2 px-1 text-right">
+                                    <input 
             189| const AppController = () => {
 190|     const { userId, isAuthReady, loading } = useData();
 191|     
@@ -920,18 +940,3 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
 208| const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
 209| const PROVIDER_MODEL = { nombre: '', responsable: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
 210| const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], costoTotal: 0, estado: 'Pendiente', archivado: false };
-
-Error durante la compilación:
-Error: La transformación falló con 1 error:
-/vercel/path0/src/App.jsx:550:1: ERROR: Se esperaba ")" pero se encontró ";"
-    en FailureErrorWithLog (/vercel/path0/node_modules/esbuild/lib/main.js:1649:15)
-    en /vercel/path0/node_modules/esbuild/lib/main.js:847:29
-    en responseCallbacks.<computed> (/vercel/path0/node_modules/esbuild/lib/main.js:703:9)
-    en handleIncomingPacket (/vercel/path0/node_modules/esbuild/lib/main.js:762:9)
-    en Socket.readFromStdout (/vercel/path0/node_modules/esbuild/lib/main.js:679:7)
-    en Socket.emit (nodo:eventos:519:28)
-    en addChunk (nodo:internal/streams/readable:561:12)
-    en readableAddChunkPushByteMode (nodo:internal/streams/readable:512:3)
-    en Readable.push (nodo:internal/streams/readable:392:5)
-    en Pipe.onStreamRead (nodo:internal/stream_base_commons:189:23)
-Error: el comando "npm run build" salió con 1
