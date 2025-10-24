@@ -20,27 +20,22 @@ import {
     FileText, List, ShoppingCart, Building, LogOut, AtSign, KeyRound, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer, Upload, Code, Image as ImageIcon
 } from 'lucide-react';
 
-// --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
-// La aplicación ahora busca VITE_FIREBASE_JSON_ONLY para evitar errores de formato JSON.
+// --- 1. CONFIGURACIÓN FIREBASE ---
 const rawJsonConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : 
-                      (import.meta.env.VITE_FIREBASE_JSON_ONLY || null); // <-- CORRECCIÓN 1 (VITE FIX)
+                      (import.meta.env.VITE_FIREBASE_JSON_ONLY || null); 
 
 let firebaseConfig = {};
 let rawAppId = 'default-app-id';
 
-// Se eliminó la declaración duplicada de 'firebaseConfig' y 'rawAppId' para corregir el error de 'esbuild'.
-
 try {
     if (rawJsonConfig) {
-        // Parsear el JSON puro
         firebaseConfig = JSON.parse(rawJsonConfig);
-        // Extraer el appId directamente del objeto, ya que no lo recibimos por separado
         rawAppId = firebaseConfig.appId || 'default-app-id'; 
     } else {
-        console.error("Error: La configuración de Firebase no se pudo cargar. Verifique las variables de entorno (VITE_FIREBASE_JSON_ONLY) y el formato JSON.");
+        console.error("Error: Configuración de Firebase no cargada. Verifique VITE_FIREBASE_JSON_ONLY.");
     }
 } catch (e) {
-    console.error(`ERROR CRÍTICO: Fallo al parsear el JSON de Firebase. Revise el formato en Vercel. Detalle: ${e.message}`);
+    console.error(`ERROR CRÍTICO: Fallo al parsear el JSON de Firebase. Detalle: ${e.message}`);
 }
 
 const appId = rawAppId.replace(/[/.]/g, '_');
@@ -51,13 +46,12 @@ if (Object.keys(firebaseConfig).length > 0) {
     db = getFirestore(app);
     auth = getAuth(app);
 } 
-// FIN CONFIGURACIÓN FIREBASE
 
 // --- 2. MODELOS DE DATOS ---
 const PRODUCT_MODEL = { nombre: '', bodega: '', proveedorId: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
 const CLIENT_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', regimen: 'Minorista', minimoCompra: 0, limiteCredito: 0, saldoPendiente: 0, archivado: false };
 const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
-const PROVIDER_MODEL = { nombre: '', responsable: '', cuit: '', telefono: '', email: '', '', direccion: '', archivado: false };
+const PROVIDER_MODEL = { nombre: '', responsable: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
 const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], costoTotal: 0, estado: 'Pendiente', archivado: false };
 
 // --- 3. HOOKS PERSONALIZADOS ---
@@ -232,16 +226,16 @@ const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distr
 const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
     try {
         const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-2.5-flash-preview-05-20';
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; // <-- CORRECCIÓN 3 (GEMINI API KEY FIX)
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
         const apiUrl = isImageGeneration 
             ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
             : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        
+        if (!apiKey) throw new Error("API Key de Gemini no configurada.");
 
         const payload = isImageGeneration
             ? { instances: { prompt: prompt }, parameters: { "sampleCount": 1 } }
             : { contents: [{ parts: [{ text: prompt }] }] };
-        
-        if (!apiKey) throw new Error("API Key de Gemini no configurada.");
 
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -271,7 +265,7 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
 };
 
 
-// --- 7. PANTALLA DE AUTENTICACIÓN (ELIMINADA, CÓDIGO SOLO PARA REFERENCIA) ---
+// --- 7. PANTALLA DE AUTENTICACIÓN ---
 const AuthScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -1410,7 +1404,7 @@ const ShippingQuoter = () => {
     );
 };
 
-// 8.7 Módulo de Herramientas (RESTAURADO y COMPLETO)
+// 8.7 Módulo de Herramientas 
 const ProfitCalculator = () => {
     const [cost, setCost] = useState(0);
     const [price, setPrice] = useState(0);
@@ -1730,7 +1724,7 @@ const Dashboard = ({ setCurrentPage }) => {
     );
 };
 
-// 8.8 Módulo Importador de Listas de Precios (NUEVO)
+// 8.8 Módulo Importador de Listas de Precios
 const PriceListImporter = () => {
     const { providers, products, createOrUpdateDoc } = useData();
     const [providerId, setProviderId] = useState('');
@@ -1759,8 +1753,8 @@ const PriceListImporter = () => {
             const model = 'gemini-2.5-flash-preview-05-20';
             const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-            
-            if (!apiKey) throw new Error("API Key de Gemini no configurada para la importación.");
+            
+            if (!apiKey) throw new Error("API Key de Gemini no configurada para la importación.");
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -1886,7 +1880,7 @@ const PriceListImporter = () => {
 // --- 9. APP PRINCIPAL Y NAVEGACIÓN ---
 const AppLayout = () => {
     const { logout } = useData();
-    const [currentPage, setCurrentPage] = useState('Dashboard');    
+    const [currentPage, setCurrentPage] = useState('Dashboard'); 
     
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard }, { name: 'Inventario', icon: Package },
