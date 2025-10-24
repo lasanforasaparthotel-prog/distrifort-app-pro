@@ -22,8 +22,11 @@ import {
 
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
 // La aplicación ahora busca VITE_FIREBASE_JSON_ONLY para evitar errores de formato JSON.
-const rawJsonConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : 
-                      (typeof VITE_FIREBASE_JSON_ONLY !== 'undefined' ? VITE_FIREBASE_JSON_ONLY : null);
+const rawJsonConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : 
+                      (import.meta.env.VITE_FIREBASE_JSON_ONLY || null); // <--- ¡ASÍ ES COMO DEBE QUEDAR!
+
+let firebaseConfig = {};
+// ... sigue el resto del archivo
 
 let firebaseConfig = {};
 let rawAppId = 'default-app-id';
