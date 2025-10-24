@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, createContext, useContext, useCall
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
     getAuth, onAuthStateChanged, signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, signOut, GoogleAuthProvider, 
+    createUserWithAndPassword, signOut, GoogleAuthProvider, 
     signInWithPopup, signInAnonymously 
 } from 'firebase/auth';
 import { 
@@ -130,8 +130,6 @@ const DataProvider = ({ children }) => {
         return await authFunction(auth, email, password);
     }, []);
     
-    // NOTA: Login/Register/GoogleSignIn/Logout se mantienen por si decide usarlos después, 
-    // pero no se usan en el flujo principal.
     const login = (email, password) => handleAuthentication(signInWithEmailAndPassword, email, password);
     const register = (email, password) => handleAuthentication(createUserWithEmailAndPassword, email, password);
     const logout = () => signOut(auth);
@@ -547,8 +545,9 @@ const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
             <p className="mt-8">Estado: <strong>{order.estado}</strong></p>
         </div>
     </PrintableDocument>
-);
+)); // <-- Cierre correcto en L. 550 aprox.
 
+// CORRECCIÓN: Se sustituyó 'modelo' por 'model' para coincidir con FormComponent
 const OrderForm = ({ model, onSave, onCancel }) => {
     const { clients, products, db, auth } = useData(); 
     const [order, setOrder] = useState(model);
