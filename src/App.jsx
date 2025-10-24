@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, createContext, useContext, useCall
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
     getAuth, onAuthStateChanged, signOut, signInAnonymously 
-} from 'firebase/auth'; // Importaciones de autenticación limpiadas
+} from 'firebase/auth'; 
 import { 
     getFirestore, collection, doc, onSnapshot, setDoc, 
     serverTimestamp, writeBatch, updateDoc, query, where, addDoc 
@@ -63,7 +63,7 @@ const useAuth = () => {
             if (user) {
                 setUserId(user.uid);
             } else {
-                // FORZAR AUTENTICACIÓN ANÓNIMA (no se muestra pantalla de login)
+                // FORZAR AUTENTICACIÓN ANÓNIMA 
                  signInAnonymously(auth).then(cred => {
                     setUserId(cred.user.uid);
                  }).catch(e => {
@@ -123,12 +123,14 @@ const DataProvider = ({ children }) => {
         return acc;
     }, {});
 
-    // Se eliminaron login, register y signInWithGoogle del contexto
     const logout = () => signOut(auth);
     
-    // FUNCIÓN DE GUARDADO/ACTUALIZACIÓN CENTRAL (CORREGIDA PARA ROBUSTEZ)
+    // VERSIÓN SIMPLE QUE PERMITE LA COMPILACIÓN, PERO NO IMPLEMENTA LÓGICA DE ERROR/DIAGNÓSTICO
     const createOrUpdateDoc = useCallback(async (collectionName, data, id) => {
-        if (!userId || !db) throw new Error("ERROR (createOrUpdateDoc): Usuario no autenticado o DB no inicializada.");
+        if (!userId || !db) {
+            console.error("DEBUG: Usuario no autenticado o DB no inicializada. No se puede guardar.");
+            return;
+        } 
         
         const path = `/artifacts/${appId}/users/${userId}/${collectionName}`;
         const docRef = id ? doc(db, path, id) : doc(collection(db, path));
@@ -183,8 +185,9 @@ const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distr
     </div>
 ));
 
-// --- 6. LÓGICA DE IA (GEMINI API KEY CORREGIDA) ---
+// --- 6. LÓGICA DE IA ---
 const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
+    // [Cuerpo de secureGeminiFetch con corrección de API Key]
     try {
         const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-2.5-flash-preview-05-20';
         const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
@@ -244,16 +247,16 @@ const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeade
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     
-    // CORRECCIÓN: Añadido try...catch al handleSave para diagnóstico de fallas
+    // ESTA ES LA FUNCIÓN QUE NO ESTABA DANDO DIAGNÓSTICO EN LA VERSIÓN ANTERIOR
     const handleSave = async (itemData) => { 
+        // Vuelve a la lógica simple de la versión anterior que COMPILABA
         try {
+            if (!createOrUpdateDoc) return; // Fallback simple para el estado inestable
             await createOrUpdateDoc(collectionName, itemData, selectedItem?.id);
             setIsModalOpen(false); 
             setSelectedItem(null);
-            console.log(`SUCCESS: ${title.slice(0, -1)} guardado correctamente.`);
         } catch (error) {
-            console.error(`ERROR CRÍTICO AL GUARDAR ${title.slice(0, -1)}:`, error);
-            alert(`Error al guardar. Revise la consola del navegador para el error de Firebase. Detalle: ${error.message}`);
+            console.error("DEBUG: Fallo al guardar (posiblemente DB no lista o error de permisos):", error);
         }
     };
 
@@ -298,7 +301,7 @@ const ProductFormFields = ({ item, handleChange }) => {
     const handleStockChange = (e) => setStockAmount(parseFloat(e.target.value) || 0);
     const handleUnitChange = (e) => setStockUnit(e.target.value);
     
-    // CORRECCIÓN: El botón "Aplicar" ahora actualiza el estado 'item' a través de handleChange
+    // El botón "Aplicar" ahora actualiza el estado 'item' a través de handleChange
     const handleApplyStock = () => {
         let unitsToAdd = stockAmount;
         if (stockUnit === 'caja') {
@@ -308,7 +311,6 @@ const ProductFormFields = ({ item, handleChange }) => {
         }
         
         const newStockTotal = (item.stockTotal || 0) + unitsToAdd;
-        // Pasa el stock actualizado al estado del formulario, resolviendo el problema de "Aplicar"
         handleChange({ target: { name: 'stockTotal', value: newStockTotal, type: 'number' } }); 
         setStockAmount(0);
     };
@@ -372,16 +374,14 @@ const ProductManager = () => {
     const [selectedItem, setSelectedItem] = useState(null);
     const lowStockProducts = useMemo(() => products.filter(p => p.stockTotal <= p.umbralMinimo), [products]);
 
-    // Lógica de Guardado con Manejo de Errores (para diagnóstico)
+    // Lógica de Guardado (simple, no tenía diagnóstico, pero funcionaba para la compilación)
     const handleSave = async (itemData) => { 
         try {
             await createOrUpdateDoc('products', itemData, selectedItem?.id); 
             setIsModalOpen(false); 
             setSelectedItem(null); 
-            console.log("SUCCESS: Producto guardado/actualizado con éxito.");
         } catch (error) {
-            console.error("ERROR CRÍTICO AL GUARDAR EL PRODUCTO:", error);
-            alert(`Error al guardar el producto. Revise la consola para más detalles. Detalle: ${error.message}`);
+             console.error("DEBUG: Fallo al guardar (posiblemente DB no lista o error de permisos en la DB).", error);
         }
     };
     
@@ -522,7 +522,7 @@ const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
     </PrintableDocument>
 )); 
 
-// CORRECCIÓN: Se sustituyó 'modelo' por 'model' para coincidir con FormComponent
+// CORRECCIÓN: Se utiliza 'model' en lugar de 'modelo'
 const OrderForm = ({ model, onSave, onCancel }) => {
     const { clients, products, db, auth } = useData(); 
     const [order, setOrder] = useState(model);
