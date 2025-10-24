@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo, createContext, useContext, useCallback, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-    getAuth, onAuthStateChanged, signInWithEmailAndPassword, 
-    createUserWithAndPassword, signOut, GoogleAuthProvider, 
-    signInWithPopup, signInAnonymously 
-} from 'firebase/auth';
+    getAuth, onAuthStateChanged, signOut, signInAnonymously 
+} from 'firebase/auth'; // Importaciones de autenticación limpiadas
 import { 
     getFirestore, collection, doc, onSnapshot, setDoc, 
     serverTimestamp, writeBatch, updateDoc, query, where, addDoc 
@@ -65,7 +63,7 @@ const useAuth = () => {
             if (user) {
                 setUserId(user.uid);
             } else {
-                // Utilizamos la autenticación anónima para asegurar un userId
+                // FORZAR AUTENTICACIÓN ANÓNIMA (no se muestra pantalla de login)
                  signInAnonymously(auth).then(cred => {
                     setUserId(cred.user.uid);
                  }).catch(e => {
@@ -125,29 +123,9 @@ const DataProvider = ({ children }) => {
         return acc;
     }, {});
 
-    const handleAuthentication = useCallback(async (authFunction, email, password) => {
-        if (!auth) throw new Error("Firebase Auth no está inicializado.");
-        return await authFunction(auth, email, password);
-    }, []);
-    
-    const login = (email, password) => handleAuthentication(signInWithEmailAndPassword, email, password);
-    const register = (email, password) => handleAuthentication(createUserWithEmailAndPassword, email, password);
+    // Se eliminaron login, register y signInWithGoogle del contexto
     const logout = () => signOut(auth);
     
-    const signInWithGoogle = useCallback(async () => {
-        if (!auth) throw new Error("Firebase Auth no está inicializado.");
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        try {
-            await signInWithPopup(auth, provider);
-        } catch (error) {
-            if (error.code === 'auth/unauthorized-domain') {
-                 setAuthDomainError(true);
-            }
-            throw error;
-        }
-    }, []);
-
     // FUNCIÓN DE GUARDADO/ACTUALIZACIÓN CENTRAL (CORREGIDA PARA ROBUSTEZ)
     const createOrUpdateDoc = useCallback(async (collectionName, data, id) => {
         if (!userId || !db) throw new Error("ERROR (createOrUpdateDoc): Usuario no autenticado o DB no inicializada.");
@@ -170,10 +148,7 @@ const DataProvider = ({ children }) => {
         authDomainError,
         ...collections.reduce((acc, name) => ({ ...acc, [name]: state[name].data }), {}),
         loading: Object.values(state).some(s => s.loading),
-        login,
-        register,
         logout,
-        signInWithGoogle,
         createOrUpdateDoc,
         archiveDoc,
         db, 
@@ -545,7 +520,7 @@ const OrderPrintable = React.forwardRef(({ order, client }, ref) => (
             <p className="mt-8">Estado: <strong>{order.estado}</strong></p>
         </div>
     </PrintableDocument>
-)); // <-- Cierre correcto en L. 550 aprox.
+)); 
 
 // CORRECCIÓN: Se sustituyó 'modelo' por 'model' para coincidir con FormComponent
 const OrderForm = ({ model, onSave, onCancel }) => {
@@ -677,7 +652,7 @@ const Dashboard = ({ setCurrentPage }) => {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                 {dashboardCards.map(card => (
-                    <Card key={card.title} title={card.title} value={card.value} icon={card.icon} color={card.color} onClick={() => setCurrentPage(card.page)}/>
+                    <Card key={card.title} value={card.value} icon={card.icon} color={card.color} onClick={() => setCurrentPage(card.page)}/>
                 ))}
             </div>
 
