@@ -23,19 +23,29 @@ import {
 
 // --- 1. CONFIGURACIÓN SEGURA DE FIREBASE ---
 // Utiliza las variables globales inyectadas por el entorno.
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = {
+  apiKey: "AIzaSyDSdpnWJiIHqY9TaruFIMBsBuWtm-WsRkI", 
+  authDomain: "distrifort.firebaseapp.com",
+  projectId: "distrifort",
+  storageBucket: "distrifort.firebasestorage.app",
+  messagingSenderId: "456742367607",
+  appId: "1:456742367607:web:25341e7e3126fd7c04f172",
+  measurementId: "G-F62DMRC8NZ"
+};
+
+// Usamos el projectId como base para el appId, ya que __app_id no está disponible
+const rawAppId = firebaseConfig.projectId || 'default-app-id';
 const appId = rawAppId.replace(/[/.]/g, '_');
 
 let app, db, auth;
-if (Object.keys(firebaseConfig).length > 0) {
+if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey) {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
     auth = getAuth(app);
     // Habilitar logs de Firestore para depuración
     setLogLevel('Debug');
 } else {
-    console.error("Configuración de Firebase no encontrada. Usando variables __firebase_config.");
+    console.error("Configuración de Firebase no encontrada o incompleta.");
 }
 
 // --- 2. MODELOS DE DATOS ---
@@ -73,19 +83,10 @@ const useAuth = () => {
             if (user) {
                 // Si hay un usuario (email/Google/anónimo), lo usamos.
                 setUserId(user.uid);
-            } else if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                // Usar token personalizado si existe
-                try {
-                    const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
-                    setUserId(userCredential.user.uid);
-                } catch (e) {
-                    console.error("Error signing in with custom token, falling back to anonymous:", e);
-                    // Fallback a anónimo si el token falla
-                    const cred = await signInAnonymously(auth);
-                    setUserId(cred.user.uid);
-                }
             } else {
-                 // Si no hay usuario ni token, forzamos la autenticación anónima.
+                 // Si no hay usuario, forzamos la autenticación anónima.
+                 // Esto es necesario porque estamos usando una config de Firebase personalizada
+                 // y no podemos usar el __initial_auth_token del entorno.
                  try {
                     const cred = await signInAnonymously(auth);
                     setUserId(cred.user.uid);
@@ -2029,4 +2030,5 @@ const AppController = () => {
 
     return <AppLayout />;
 };
+
 
