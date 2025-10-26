@@ -8,7 +8,8 @@ import {
     signOut,
     GoogleAuthProvider,
     signInWithPopup,
-    signInAnonymously
+    signInAnonymously,
+    signInWithCustomToken
 } from 'firebase/auth';
 import { 
     getFirestore, collection, doc, onSnapshot, setDoc, 
@@ -2028,3 +2029,4 @@ const AppController = () => {
 
     return <AppLayout />;
 };
+
