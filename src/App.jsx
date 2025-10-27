@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo, createContext, useContext, useCallback, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
+    // AÑADIR/RESTAURAR funciones necesarias para login persistente
     getAuth,
     onAuthStateChanged,
-    // signInWithEmailAndPassword, // No usado
-    // createUserWithEmailAndPassword, // No usado
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
     signOut,
-    // GoogleAuthProvider, // No usado
-    // signInWithPopup, // No usado
-    signInAnonymously,
-    // signInWithCustomToken // No usado en esta versión final
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInAnonymously // Mantener por si acaso, aunque no será el flujo principal
 } from 'firebase/auth';
 import {
     getFirestore, collection, doc, onSnapshot, setDoc,
@@ -18,7 +18,9 @@ import {
 import {
     LayoutDashboard, Package, Users, Truck, Search, Plus,
     Trash2, Edit, X, DollarSign, BrainCircuit, AlertCircle, Save,
-    FileText, ShoppingCart, Building, LogOut, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer, Upload, Image as ImageIcon
+    FileText, ShoppingCart, Building, LogOut, TrendingUp, TrendingDown, Send, Mail, MapPin, Printer, Upload, Image as ImageIcon,
+    // AÑADIR íconos para AuthScreen
+    AtSign, KeyRound
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE INCORPORADA ---
@@ -56,12 +58,82 @@ const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], 
 const COLLECTION_NAMES = { products: 'Inventario', clients: 'Clientes', orders: 'Pedidos', providers: 'Proveedores', purchaseOrders: 'OrdenesCompra' };
 
 // --- 3. HOOKS PERSONALIZADOS ---
-const useAuth = () => { /* ... (sin cambios) ... */ };
-const useCollection = (collectionName) => { /* ... (sin cambios) ... */ };
+const useAuth = () => {
+    const [userId, setUserId] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    const [authDomainError, setAuthDomainError] = useState(false);
+
+    useEffect(() => {
+        if (!auth) {
+            console.warn("Auth no inicializado en useAuth");
+            setIsAuthReady(true);
+            return;
+        }
+        const unsub = onAuthStateChanged(auth, (user) => {
+            console.log("Auth state changed:", user ? `User ID: ${user.uid}` : "No user");
+            setUserId(user ? user.uid : null);
+            setIsAuthReady(true);
+        });
+        return () => { console.log("Cleaning up auth listener"); unsub(); };
+    }, []);
+
+    return { userId, isAuthReady, authDomainError, setAuthDomainError };
+};
+
+const useCollection = (collectionName) => {
+    const { userId, isAuthReady } = useAuth();
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        if (!isAuthReady || !userId || !db) {
+             if (isAuthReady && !userId) setData([]);
+            setLoading(false); return;
+        };
+        const realCollectionName = COLLECTION_NAMES[collectionName];
+        if (!realCollectionName) { console.error(`Colección inválida: ${collectionName}`); setLoading(false); return; }
+        const path = `/artifacts/${appId}/users/${userId}/${realCollectionName}`;
+        const q = query(collection(db, path), where("archivado", "==", false));
+        setLoading(true);
+        const unsub = onSnapshot(q, snapshot => {
+            setData(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false);
+        }, err => { console.error(`Error en ${path}:`, err); setLoading(false); });
+        return unsub;
+    }, [userId, collectionName, isAuthReady]);
+    return { data, loading };
+};
+
 
 // --- 4. CONTEXTO DE DATOS Y ACCIONES ---
 const DataContext = createContext(null);
-const DataProvider = ({ children }) => { /* ... (sin cambios) ... */ };
+const DataProvider = ({ children }) => {
+    const { userId, isAuthReady, authDomainError, setAuthDomainError } = useAuth();
+    const collections = ['products', 'clients', 'orders', 'providers', 'purchaseOrders'];
+    const state = collections.reduce((acc, name) => { acc[name] = useCollection(name); return acc; }, {});
+    const handleAuthentication = useCallback(async (authFunction, email, password) => {
+        if (!auth) throw new Error("Firebase Auth no está inicializado.");
+        return await authFunction(auth, email, password);
+    }, []);
+    const login = useCallback((email, password) => handleAuthentication(signInWithEmailAndPassword, email, password), [handleAuthentication]);
+    const register = useCallback((email, password) => handleAuthentication(createUserWithEmailAndPassword, email, password), [handleAuthentication]);
+    const logout = useCallback(() => { if (auth) signOut(auth); else console.error("Logout: Auth no inicializado"); }, []);
+    const signInWithGoogle = useCallback(async () => {
+        if (!auth) throw new Error("Firebase Auth no está inicializado.");
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        try {
+            await signInWithPopup(auth, provider); setAuthDomainError(false);
+        } catch (error) {
+            console.error("Google Sign-In Error:", error);
+            if (error.code === 'auth/unauthorized-domain') { console.error("Error: Dominio no autorizado..."); setAuthDomainError(true); }
+            throw error;
+        }
+    }, [setAuthDomainError]);
+    const createOrUpdateDoc = useCallback(async (collectionName, data, id) => { /* ... (sin cambios) ... */ }, [userId]);
+    const archiveDoc = useCallback(async (collectionName, id) => { /* ... (sin cambios) ... */ }, [userId]);
+    const combinedLoading = useMemo(() => Object.values(state).some(s => s.loading), [state]);
+    const value = { userId, isAuthReady, authDomainError, ...collections.reduce((acc, name) => ({ ...acc, [name]: state[name].data }), {}), loading: combinedLoading, login, register, logout, signInWithGoogle, createOrUpdateDoc, archiveDoc, };
+    return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+};
 const useData = () => useContext(DataContext);
 
 // --- 5. COMPONENTES DE UI GENÉRICOS ---
@@ -73,87 +145,71 @@ const Select = React.memo(({ label, name, value, onChange, children, required = 
 const Card = React.memo(({ title, value, icon: Icon, color = 'indigo', onClick }) => (<div onClick={onClick} className={`bg-white p-4 rounded-xl shadow-md border border-gray-100 flex-1 ${onClick ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''}`}><div className="flex items-center justify-between"><p className="text-sm font-medium text-gray-500">{title}</p>{Icon && <Icon className={`w-6 h-6 text-${color}-500`} />}</div><p className="text-2xl md:text-3xl font-bold mt-1 text-gray-800">{value}</p></div>));
 const PageLoader = ({ text }) => (<div className="min-h-screen flex flex-col items-center justify-center text-gray-500"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div><p className="mt-2">{text}</p></div>);
 const PageHeader = React.memo(({ title, children }) => (<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><h2 className="text-2xl md:text-3xl font-bold text-gray-800">{title}</h2><div>{children}</div></div>));
-const PrintableDocument = React.forwardRef(({ children, title, logoText = "DistriFort" }, ref) => (<div ref={ref} className="p-6 print:p-0 print:text-black w-full min-h-screen"><div className="hidden print:block mb-8 border-b-2 border-gray-900 pb-2"><h1 className="text-3xl font-black">{logoText}</h1><h2 className="text-lg font-semibold">{title}</h2><p className="text-sm">Fecha de Emisión: {new Date().toLocaleDateString()}</p></div>{children}<style dangerouslySetInnerHTML={{__html: `@page { size: A4; margin: 1cm; } body { margin: 0 !important; } .print\\:hidden { display: none !important; } .hidden.print\\:block { display: block !important; } .print\\:text-black { color: #000 !important; } .print\\:p-0 { padding: 0 !important; } @media print { .no-print { display: none !important; } }`}} /></div>));
+// --- INICIO CAMBIO NOMBRE EMPRESA ---
+const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distribuidora 5" }, ref) => ( // Cambiado aquí
+    <div ref={ref} className="p-6 print:p-0 print:text-black w-full min-h-screen">
+        <div className="hidden print:block mb-8 border-b-2 border-gray-900 pb-2">
+            <h1 className="text-3xl font-black">{logoText}</h1>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            <p className="text-sm">Fecha de Emisión: {new Date().toLocaleDateString()}</p>
+        </div>
+        {children}
+        <style dangerouslySetInnerHTML={{__html: `@page { size: A4; margin: 1cm; } body { margin: 0 !important; } .print\\:hidden { display: none !important; } .hidden.print\\:block { display: block !important; } .print\\:text-black { color: #000 !important; } .print\\:p-0 { padding: 0 !important; } @media print { .no-print { display: none !important; } }`}} />
+    </div>
+));
+// --- FIN CAMBIO NOMBRE EMPRESA ---
+const GoogleIcon = () => (<svg className="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.335,44,30.038,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>);
 
-// --- 6. LÓGICA DE IA (GEMINI) --- (MODIFICADA PARA USAR PROXY)
-const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
-    // --- INICIO MODIFICACIÓN: LLAMAR AL PROXY ---
-    // La URL ahora apunta a tu función de Vercel
-    const proxyUrl = '/api/proxy_gemini'; // Ruta relativa
-    // --- FIN MODIFICACIÓN ---
 
-    try {
-        console.log(`[secureGeminiFetch] Calling Proxy: ${proxyUrl}`);
+// --- 6. LÓGICA DE IA (GEMINI) ---
+const secureGeminiFetch = async (prompt, isImageGeneration = false) => { /* ... (sin cambios) ... */ };
 
-        // --- INICIO MODIFICACIÓN: PAYLOAD PARA EL PROXY ---
-        // Enviar el prompt y una bandera para indicar si es imagen
-        const payload = {
-            prompt: prompt,
-            isImage: isImageGeneration // Añadimos esta bandera
-        };
-        // --- FIN MODIFICACIÓN ---
 
-        // Implementar reintentos con backoff exponencial (como antes)
-        let response;
-        let attempts = 0;
-        const maxAttempts = 3;
-        let delay = 1000;
+// --- 7. PANTALLA DE AUTENTICACIÓN ---
+// --- INICIO CAMBIO NOMBRE EMPRESA ---
+const AuthScreen = () => {
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const { login, register, signInWithGoogle, authDomainError } = useData();
+    const displayError = authDomainError ? "Error: Dominio no autorizado para Google Sign-In..." : error;
 
-        while (attempts < maxAttempts) {
-            attempts++;
-            try {
-                // --- INICIO MODIFICACIÓN: LLAMADA A FETCH AL PROXY ---
-                response = await fetch(proxyUrl, { // Usar proxyUrl
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload), // Enviar el nuevo payload
-                });
-                // --- FIN MODIFICACIÓN ---
+    const handleSubmit = async (e) => {
+        e.preventDefault(); setError(''); setLoading(true);
+        try { if (isLogin) await login(email, password); else await register(email, password); }
+        catch (err) { console.error("Auth error:", err); setError(err.message || 'Ocurrió un error.'); }
+        finally { setLoading(false); }
+    };
 
-                // Manejo de reintentos (sin cambios)
-                if (response.status === 429 || response.status >= 500) {
-                   if (attempts >= maxAttempts) throw new Error(`Proxy error after ${attempts} attempts (status ${response.status}).`);
-                   console.warn(`[secureGeminiFetch] Proxy attempt ${attempts} failed (${response.status}). Retrying in ${delay / 1000}s...`);
-                   await new Promise(resolve => setTimeout(resolve, delay)); delay *= 2; continue;
-                }
-                break;
-            } catch (networkError) {
-                 if (attempts >= maxAttempts) throw networkError;
-                 console.warn(`[secureGeminiFetch] Proxy attempt ${attempts} network error. Retrying in ${delay / 1000}s...`, networkError);
-                 await new Promise(resolve => setTimeout(resolve, delay)); delay *= 2;
-            }
-        }
+    const handleGoogleSignIn = async () => {
+        setError(''); setLoading(true);
+        try { await signInWithGoogle(); }
+        catch (err) { if (!authDomainError) setError(err.message || 'Error con Google.'); }
+        finally { setLoading(false); }
+    };
 
-        if (!response) throw new Error("No response from proxy after attempts.");
-
-        if (!response.ok) {
-            let errorData;
-            try { errorData = await response.json(); } catch (e) { throw new Error(`HTTP error ${response.status}: ${response.statusText}`); }
-            // El proxy debería devolver un error en formato { error: "mensaje" }
-            const message = errorData?.error || `Error ${response.status} desde el proxy.`;
-            console.error("[secureGeminiFetch] Proxy Error Data:", errorData);
-            throw new Error(message);
-        }
-
-        const data = await response.json();
-
-        // --- INICIO MODIFICACIÓN: PROCESAR RESPUESTA DEL PROXY ---
-        // El proxy ahora debería devolver { text: "..." } o { imageUrl: "data:..." }
-        if (isImageGeneration) {
-            if (!data.imageUrl) throw new Error("Proxy no devolvió una URL de imagen válida.");
-            return data.imageUrl; // Usar la URL base64 devuelta por el proxy
-        } else {
-            if (!data.text) { console.warn("Respuesta del proxy vacía:", data); return "Proxy no generó respuesta válida."; }
-            return data.text; // Usar el texto devuelto por el proxy
-        }
-        // --- FIN MODIFICACIÓN ---
-
-    } catch (error) {
-        console.error("[secureGeminiFetch] Final Error calling Proxy:", error);
-        return `Hubo un error al conectar con el asistente de IA vía proxy. (Detalle: ${error.message})`;
-    }
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-indigo-100 flex items-center justify-center p-4 font-sans">
+            <div className="w-full max-w-sm mx-auto bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+                {/* Cambiado aquí */}
+                <h1 className="text-3xl font-black text-indigo-600 text-center mb-2">Distribuidora 5</h1>
+                <h2 className="text-xl font-bold text-gray-800 text-center mb-6">{isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}</h2>
+                {displayError && (<div className="p-3 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200" role="alert">{displayError}</div>)}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Input label="Correo Electrónico" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="tu@email.com" icon={AtSign} />
+                    <Input label="Contraseña" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" icon={KeyRound} />
+                    <Button type="submit" disabled={loading} className="w-full">{loading ? 'Procesando...' : (isLogin ? 'Entrar' : 'Registrarse')}</Button>
+                </form>
+                <div className="mt-6 text-center"><button onClick={() => setIsLogin(!isLogin)} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">{isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia Sesión'}</button></div>
+                <div className="my-6 flex items-center"><div className="flex-grow border-t border-gray-300"></div><span className="flex-shrink mx-4 text-gray-400 text-sm">O</span><div className="flex-grow border-t border-gray-300"></div></div>
+                <Button onClick={handleGoogleSignIn} disabled={loading} className="w-full !bg-white !text-gray-700 border border-gray-300 hover:!bg-gray-50 shadow-sm" icon={GoogleIcon}>{loading ? 'Conectando...' : 'Continuar con Google'}</Button>
+            </div>
+        </div>
+    );
 };
-
+// --- FIN CAMBIO NOMBRE EMPRESA ---
 
 // --- 8. MÓDULOS FUNCIONALES (PÁGINAS) ---
 // (Componentes FormComponent, ManagerComponent, Módulos Producto, Clientes, Proveedores, Pedidos, OC, Lista Precios, Búsqueda, Cotización, Herramientas, Dashboard, Importador)
@@ -169,11 +225,9 @@ const ClientManager = () => { /* ... */ };
 const ProviderFormFields = React.memo(({ item, handleChange }) => { /* ... */ });
 const ProviderTableRow = React.memo(({ item, onEdit, onArchive }) => { /* ... */ });
 const ProviderManager = () => { /* ... */ };
-const generateWhatsAppLink = (client, order) => { /* ... */ };
 const OrderPrintable = React.forwardRef(({ order, client }, ref) => { /* ... */ });
 const OrderForm = ({ model, onSave, onCancel }) => { /* ... */ };
 const OrderManager = () => { /* ... */ };
-const generatePurchaseOrderLink = (provider, po) => { /* ... */ };
 const PurchaseOrderPrintable = React.forwardRef(({ po, provider }, ref) => { /* ... */ });
 const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => { /* ... */ };
 const PurchaseOrderManager = () => { /* ... */ };
@@ -190,7 +244,76 @@ const PriceListImporter = () => { /* ... */ };
 
 
 // --- 9. APP PRINCIPAL Y NAVEGACIÓN ---
-const AppLayout = () => { /* ... (sin cambios, usar definición completa anterior) ... */ };
+// --- INICIO CAMBIO NOMBRE EMPRESA ---
+const AppLayout = () => {
+    const { logout, userId } = useData();
+    const [currentPage, setCurrentPage] = useState('Dashboard');
+    const navItems = [
+        { name: 'Dashboard', icon: LayoutDashboard }, { name: 'Inventario', icon: Package },
+        { name: 'Clientes', icon: Users }, { name: 'Proveedores', icon: Building },
+        { name: 'Pedidos', icon: ShoppingCart }, { name: 'Órdenes de Compra', icon: Truck },
+        { name: 'Lista de Precios', icon: FileText },
+        { name: 'Importar Lista (IA)', icon: Upload },
+        { name: 'Buscar', icon: Search }, { name: 'Herramientas', icon: BrainCircuit },
+        { name: 'Cotización', icon: MapPin },
+    ];
+    const handleSetCurrentPage = (pageName) => { setCurrentPage(pageName); };
+
+    const renderPage = () => {
+        if (!db) return <div className="text-center text-red-500">Error: La configuración de Firebase no se pudo cargar.</div>
+        switch (currentPage) {
+            case 'Dashboard': return <Dashboard setCurrentPage={handleSetCurrentPage} />;
+            case 'Inventario': return <ProductManager />;
+            case 'Clientes': return <ClientManager />;
+            case 'Proveedores': return <ProviderManager />;
+            case 'Pedidos': return <OrderManager />;
+            case 'Órdenes de Compra': return <PurchaseOrderManager />;
+            case 'Lista de Precios': return <PriceListManager />;
+            case 'Importar Lista (IA)': return <PriceListImporter />;
+            case 'Buscar': return <GlobalSearch />;
+            case 'Herramientas': return <Tools />;
+            case 'Cotización': return <ShippingQuoter />;
+            default: return <Dashboard setCurrentPage={handleSetCurrentPage} />;
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
+            <nav className="fixed bottom-0 left-0 right-0 md:relative md:w-64 bg-white shadow-lg p-2 md:p-4 flex flex-col shrink-0 z-20 border-t md:border-t-0 md:shadow-none md-border-r">
+                {/* Cambiado aquí */}
+                <h1 className="hidden md:block text-2xl font-black text-indigo-600 mb-8 px-2">Distribuidora 5</h1>
+                <ul className="flex flex-row md:flex-col md:space-y-2 flex-grow overflow-x-auto whitespace-nowrap md:overflow-x-visible">
+                    {navItems.map(item => (
+                        <li key={item.name} className="flex-shrink-0 md:flex-shrink">
+                            <button onClick={() => setCurrentPage(item.name)} className={`w-full flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-3 p-1 md:p-3 rounded-lg text-center md:text-left font-semibold transition ${currentPage === item.name ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100 hover:text-indigo-600'}`}>
+                                <item.icon className="w-6 h-6" />
+                                <span className="text-xs md:text-base">{item.name}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+                <div className="mt-auto hidden md:block space-y-2 pt-4 border-t">
+                     <div className='px-3 text-xs text-gray-400 truncate'>
+                        <p title={`App ID: ${appId}`}>App: {appId}</p>
+                        <p title={`User ID: ${userId}`}>User: {userId}</p>
+                     </div>
+                     <button onClick={logout} className="w-full flex items-center space-x-3 p-3 rounded-lg text-left font-semibold text-gray-600 hover:bg-gray-100 hover:text-indigo-600 transition">
+                        <LogOut className="w-6 h-6" />
+                        <span>Cerrar Sesión</span>
+                    </button>
+                </div>
+            </nav>
+            <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-20 md:pb-8">{renderPage()}</main>
+        </div>
+    );
+};
+// --- FIN CAMBIO NOMBRE EMPRESA ---
+
 export default function DistriFortApp() { return ( <DataProvider> <AppController /> </DataProvider> ); };
-const AppController = () => { /* ... (sin cambios, usar definición completa anterior) ... */ };
+const AppController = () => {
+    const { userId, isAuthReady, loading } = useData();
+    if (!isAuthReady) { return <PageLoader text="Verificando sesión..." />; }
+    if (!userId) { return <AuthScreen />; }
+    else { if (loading) { return <PageLoader text="Cargando datos..." />; } return <AppLayout />; }
+};
 
