@@ -49,8 +49,27 @@ if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey) {
     console.error("Configuración de Firebase no encontrada o incompleta.");
 }
 
-// --- 2. MODELOS DE DATOS ---
-const PRODUCT_MODEL = { nombre: '', marca: '', especie: 'Vino', varietal: '', costo: 0, precioUnidad: 0, precioCaja: 0, udsPorCaja: 6, stockTotal: 0, umbralMinimo: 10, archivado: false };
+// --- 2. MODELOS DE DATOS (ACTUALIZADO) ---
+const PRODUCT_MODEL = { 
+    codigo: '', 
+    categoria: '', 
+    nombreVariante: '', 
+    marca: '', 
+    presentacion: '', 
+    proveedorId: '', // Añadido para el select de proveedor
+    nombreProveedor: '', // Añadido para el select de proveedor
+    costo: 0, 
+    precioPublico: 0, // Reemplaza a precioUnidad
+    precioCaja: 0, 
+    precioPack: 0, 
+    precioPallet: 0, 
+    udsPorCaja: 6, 
+    udsPorPack: 0, 
+    udsPorPallet: 0, 
+    stockTotal: 0, 
+    umbralMinimo: 10, 
+    archivado: false 
+};
 const CLIENT_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', regimen: 'Minorista', minimoCompra: 0, limiteCredito: 0, saldoPendiente: 0, archivado: false };
 const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
 const PROVIDER_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
@@ -121,7 +140,10 @@ const useCollection = (collectionName) => {
         const q = query(collection(db, path), where("archivado", "==", false));
         
         const unsub = onSnapshot(q, snapshot => {
-            setData(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+            // MODIFICADO: Aseguramos que 'id' (el ID del documento) 
+            // siempre sobreescriba cualquier campo 'id' dentro de data().
+            // Esto evita que un campo 'id' guardado en el documento pise el ID real del documento.
+            setData(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
             setLoading(false);
         }, err => {
             console.error(`[useCollection] Error en ${path}:`, err);
@@ -304,6 +326,7 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
 
 // --- 8. MÓDULOS FUNCIONALES (PÁGINAS) ---
 
+// FormComponent ahora pasa 'setItem' a sus hijos
 const FormComponent = ({ model, onSave, onCancel, children }) => {
     const [item, setItem] = useState(model);
     const handleChange = e => {
@@ -311,7 +334,8 @@ const FormComponent = ({ model, onSave, onCancel, children }) => {
         setItem(prev => ({ ...prev, [name]: type === 'number' ? parseFloat(value) || 0 : value }));
     };
     const handleSubmit = e => { e.preventDefault(); onSave(item); };
-    return <form onSubmit={handleSubmit} className="space-y-4">{React.cloneElement(children, { item, handleChange })}<div className="flex justify-end space-x-3 pt-4"><Button onClick={onCancel} className="bg-gray-200 text-gray-800 hover:bg-gray-300">Cancelar</Button><Button type="submit" icon={Save}>Guardar</Button></div></form>;
+    // Pasamos setItem a los hijos clonados
+    return <form onSubmit={handleSubmit} className="space-y-4">{React.cloneElement(children, { item, handleChange, setItem })}<div className="flex justify-end space-x-3 pt-4"><Button onClick={onCancel} className="bg-gray-200 text-gray-800 hover:bg-gray-300">Cancelar</Button><Button type="submit" icon={Save}>Guardar</Button></div></form>;
 }
 
 const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeaders, TableRow }) => {
@@ -348,48 +372,113 @@ const ManagerComponent = ({ title, collectionName, model, FormFields, TableHeade
 }
 
 // 8.1 Módulos de Gestión Básica
-const ProductFormFields = ({ item, handleChange, onStockUpdate }) => {
+// =================================================================
+// INICIO DE LA MODIFICACIÓN: ProductFormFields (Coincide con las imágenes)
+// =================================================================
+const ProductFormFields = ({ item, handleChange, setItem, providers }) => {
     const [stockAmount, setStockAmount] = useState(0);
     const [stockUnit, setStockUnit] = useState('unidad');
-    const udsPorCaja = item.udsPorCaja || 6;
+    
     const handleStockChange = (e) => setStockAmount(parseFloat(e.target.value) || 0);
     const handleUnitChange = (e) => setStockUnit(e.target.value);
+    
     const handleApplyStock = () => {
         let unitsToAdd = stockAmount;
-        if (stockUnit === 'caja') {
-            unitsToAdd *= udsPorCaja;
+        if (stockUnit === 'caja' && (item.udsPorCaja || 0) > 0) {
+            unitsToAdd *= item.udsPorCaja;
+        } else if (stockUnit === 'pack' && (item.udsPorPack || 0) > 0) {
+            unitsToAdd *= item.udsPorPack;
+        } else if (stockUnit === 'pallet' && (item.udsPorPallet || 0) > 0) {
+            unitsToAdd *= item.udsPorPallet;
         }
+        
         const newStockTotal = (item.stockTotal || 0) + unitsToAdd;
-        onStockUpdate(newStockTotal);
+        
+        // Usamos setItem (del FormComponent) para actualizar el estado del formulario
+        if (setItem) {
+            setItem(prev => ({ ...prev, stockTotal: newStockTotal }));
+        }
+        
         setStockAmount(0);
     };
 
+    // Manejador para el Select de Proveedor
+    const handleProviderChange = (e) => {
+        const { value } = e.target;
+        const provider = providers.find(p => p.id === value);
+        // Actualizamos múltiples campos usando handleChange
+        handleChange({ target: { name: 'proveedorId', value: value } });
+        handleChange({ target: { name: 'nombreProveedor', value: provider ? provider.nombre : '' } });
+    };
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Nombre" name="nombre" value={item.nombre} onChange={handleChange} required />
-            <Input label="Marca" name="marca" value={item.marca} onChange={handleChange} />
-            <Input label="Precio Unidad ($)" name="precioUnidad" type="number" value={item.precioUnidad} onChange={handleChange} required />
-            <Input label="Costo por Unidad ($)" name="costo" type="number" value={item.costo} onChange={handleChange} required />
-            <Input label="Unidades por Caja" name="udsPorCaja" type="number" value={item.udsPorCaja} onChange={handleChange} />
-            <Input label="Umbral Mínimo" name="umbralMinimo" type="number" value={item.umbralMinimo} onChange={handleChange} />
-            <div className="col-span-full border-t pt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Stock Actual (Unidades)</label>
-                <p className="text-2xl font-bold text-indigo-600">{item.stockTotal || 0}</p>
+        <div className="space-y-6">
+            {/* --- Información Básica --- */}
+            <div>
+                <h4 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Información Básica</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Input label="Código" name="codigo" value={item.codigo} onChange={handleChange} placeholder="Ej: VTM001" />
+                    <Input label="Categoría (Tipo Bebida)" name="categoria" value={item.categoria} onChange={handleChange} placeholder="Ej: Vino Tinto, Agua" />
+                    <Input label="Nombre / Variante" name="nombreVariante" value={item.nombreVariante} onChange={handleChange} placeholder="Ej: Emilia Malbec" required />
+                    <Input label="Marca / Bodega" name="marca" value={item.marca} onChange={handleChange} placeholder="Ej: Bodega Norton" />
+                    <Input label="Presentación" name="presentacion" value={item.presentacion} onChange={handleChange} placeholder="Ej: 750cc, 1L, Lata 473cc" />
+                    <Select label="Proveedor" name="proveedorId" value={item.proveedorId} onChange={handleProviderChange}>
+                        <option value="">-- Seleccionar --</option>
+                        {providers && providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </Select>
+                </div>
             </div>
-            <div className="col-span-full grid grid-cols-3 gap-2 items-end">
-                <Input label="Añadir Stock" type="number" value={stockAmount} onChange={handleStockChange} className="col-span-1" />
-                <Select label="Unidad" value={stockUnit} onChange={handleUnitChange} className="col-span-1">
-                    <option value="unidad">Unidad</option>
-                    <option value="caja">Caja ({udsPorCaja} uds)</option>
-                </Select>
-                <Button onClick={handleApplyStock} disabled={stockAmount <= 0} className="col-span-1 !bg-green-600 hover:!bg-green-700 !py-2">
-                    Aplicar
-                </Button>
+
+            {/* --- Precios y Costos --- */}
+            <div>
+                <h4 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Precios y Costos</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Input label="Costo por Unidad ($)" name="costo" type="number" value={item.costo} onChange={handleChange} required />
+                    <Input label="Precio (Público) ($)" name="precioPublico" type="number" value={item.precioPublico} onChange={handleChange} required />
+                    <Input label="Precio por Caja ($)" name="precioCaja" type="number" value={item.precioCaja} onChange={handleChange} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <Input label="Precio por Pack ($)" name="precioPack" type="number" value={item.precioPack} onChange={handleChange} />
+                    <Input label="Precio por Pallet ($)" name="precioPallet" type="number" value={item.precioPallet} onChange={handleChange} />
+                </div>
             </div>
+
+            {/* --- Unidades y Stock --- */}
+            <div>
+                <h4 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Unidades y Stock</h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Input label="Unidades por Caja" name="udsPorCaja" type="number" value={item.udsPorCaja} onChange={handleChange} />
+                    <Input label="Unidades por Pack" name="udsPorPack" type="number" value={item.udsPorPack} onChange={handleChange} />
+                    <Input label="Unidades por Pallet" name="udsPorPallet" type="number" value={item.udsPorPallet} onChange={handleChange} />
+                    <Input label="Umbral Mínimo (uds)" name="umbralMinimo" type="number" value={item.umbralMinimo} onChange={handleChange} />
+                </div>
+                <div className="border-t pt-4 mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Actual (Unidades)</label>
+                    <p className="text-2xl font-bold text-indigo-600">{item.stockTotal || 0}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 items-end mt-4">
+                    <Input label="Añadir Stock (Cantidad)" type="number" value={stockAmount} onChange={handleStockChange} className="col-span-1" />
+                    <Select label="Unidad de Medida" value={stockUnit} onChange={handleUnitChange} className="col-span-1">
+                        <option value="unidad">Unidad</option>
+                        {item.udsPorCaja > 0 && <option value="caja">Caja ({item.udsPorCaja} uds)</option>}
+                        {item.udsPorPack > 0 && <option value="pack">Pack ({item.udsPorPack} uds)</option>}
+                        {item.udsPorPallet > 0 && <option value="pallet">Pallet ({item.udsPorPallet} uds)</option>}
+                    </Select>
+                    <Button onClick={handleApplyStock} disabled={stockAmount <= 0} className="col-span-1 !bg-green-600 hover:!bg-green-700 !py-2">
+                        Aplicar al Stock
+                    </Button>
+                </div>
+            </div>
+            
+            {/* Input oculto para asegurar que stockTotal se guarde */}
             <input type="hidden" name="stockTotal" value={item.stockTotal} />
         </div>
     );
 };
+// =================================================================
+// FIN DE LA MODIFICACIÓN: ProductFormFields
+// =================================================================
+
 
 const ProductManager = () => {
     const { products, providers, createOrUpdateDoc, archiveDoc } = useData();
@@ -407,7 +496,7 @@ const ProductManager = () => {
         }
         const poItems = lowStockProducts.map(p => ({
             productId: p.id,
-            nombreProducto: p.nombre,
+            nombreProducto: p.nombreVariante, // Actualizado
             cantidad: p.udsPorCaja * 2,
             costoUnidad: p.costo,
             subtotalLinea: p.costo * p.udsPorCaja * 2,
@@ -428,9 +517,14 @@ const ProductManager = () => {
         setIsPOCreationOpen(false);
         setPODraft(null);
     };
+    
+    // Esta función es para que el estado de ProductManager (selectedItem) 
+    // se actualice si el usuario cambia el stock y *luego* sigue editando.
+    // El estado principal del formulario está en FormComponent.
     const handleStockUpdate = (newStock) => {
-        setSelectedItem(prev => ({ ...prev, stockTotal: newStock }));
+        setSelectedItem(prev => ({ ...prev, stockTotal: newStockTotal }));
     };
+    
     const handleSave = async (itemData) => { 
         itemData.stockTotal = parseFloat(itemData.stockTotal) || 0;
         await createOrUpdateDoc('products', itemData, selectedItem?.id); 
@@ -439,8 +533,22 @@ const ProductManager = () => {
     };
     const handleEdit = (item) => { setSelectedItem(item); setIsModalOpen(true); };
     const handleAddNew = () => { setSelectedItem(null); setIsModalOpen(true); };
-    const ProductTableRow = ({ item, onEdit, onArchive }) => (<tr className="hover:bg-gray-50"><td className="px-4 py-4 font-semibold">{item.nombre}</td><td className={`px-4 py-4 ${item.stockTotal <= item.umbralMinimo ? 'text-red-500 font-bold' : ''}`}>{item.stockTotal}</td><td className="px-4 py-4">{FORMAT_CURRENCY(item.precioUnidad)}</td><td className="px-4 py-4 text-right space-x-2"><Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button><Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button></td></tr>);
-    const ProductTableHeaders = ["Nombre", "Stock", "Precio"];
+    
+    // Columnas de la tabla actualizadas
+    const ProductTableRow = ({ item, onEdit, onArchive }) => (
+        <tr className="hover:bg-gray-50">
+            <td className="px-4 py-4 font-mono text-xs">{item.codigo}</td>
+            <td className="px-4 py-4 font-semibold">{item.nombreVariante}</td>
+            <td className="px-4 py-4 hidden sm:table-cell">{item.categoria}</td>
+            <td className={`px-4 py-4 ${item.stockTotal <= item.umbralMinimo ? 'text-red-500 font-bold' : ''}`}>{item.stockTotal}</td>
+            <td className="px-4 py-4">{FORMAT_CURRENCY(item.precioPublico)}</td>
+            <td className="px-4 py-4 text-right space-x-2">
+                <Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
+                <Button onClick={onArchive} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
+            </td>
+        </tr>
+    );
+    const ProductTableHeaders = ["Código", "Nombre / Variante", "Categoría", "Stock", "Precio (Público)"];
     
     return (<div className="space-y-6">
         <PageHeader title="Inventario">
@@ -455,7 +563,8 @@ const ProductManager = () => {
         </PageHeader>
         {isModalOpen && <Modal title={(selectedItem ? "Editar " : "Nuevo ") + "Producto"} onClose={() => setIsModalOpen(false)}>
             <FormComponent model={selectedItem || PRODUCT_MODEL} onSave={handleSave} onCancel={() => setIsModalOpen(false)}>
-                <ProductFormFields onStockUpdate={handleStockUpdate} />
+                {/* Pasamos 'providers' al formulario */}
+                <ProductFormFields providers={providers} onStockUpdate={handleStockUpdate} />
             </FormComponent>
         </Modal>}
         {isPOCreationOpen && poDraft && (
@@ -579,12 +688,15 @@ const OrderForm = ({ model, onSave, onCancel }) => {
 
     const handleAddItem = () => {
         if (!selectedProduct || order.items.some(i => i.productId === selectedProductId)) return;
+        
+        // Actualizado para usar precioPublico
         const price = selectedClient?.regimen === 'Mayorista' && selectedProduct.precioCaja > 0 
             ? selectedProduct.precioCaja 
-            : selectedProduct.precioUnidad;
+            : selectedProduct.precioPublico; // Actualizado
+            
         const newItem = {
             productId: selectedProduct.id,
-            nombreProducto: selectedProduct.nombre,
+            nombreProducto: selectedProduct.nombreVariante, // Actualizado
             cantidad: 1,
             precioUnidad: price,
             subtotalLinea: price * 1,
@@ -676,8 +788,9 @@ const OrderForm = ({ model, onSave, onCancel }) => {
             <div className="flex space-x-2">
                 <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
                     <option value="">Añadir Producto...</option>
+                    {/* Actualizado para usar nombreVariante */}
                     {products.filter(p => !order.items.some(i => i.productId === p.id)).map(p => (
-                        <option key={p.id} value={p.id}>{p.nombre} ({p.stockTotal} en stock)</option>
+                        <option key={p.id} value={p.id}>{p.nombreVariante} ({p.stockTotal} en stock)</option>
                     ))}
                 </Select>
                 <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
@@ -727,8 +840,12 @@ const OrderManager = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const componentRef = useRef(); 
+    
+    // MODIFICADO: Esta función ahora solo cierra el modal.
+    // OrderForm ya maneja su propia lógica de guardado (batch.commit()).
+    // La línea anterior causaba un segundo guardado y creaba documentos duplicados.
     const handleSave = async (itemData) => { 
-        await createOrUpdateDoc('orders', itemData, selectedItem?.id); 
+        // await createOrUpdateDoc('orders', itemData, selectedItem?.id); // <-- LÍNEA ELIMINADA
         setIsModalOpen(false); 
         setSelectedItem(null); 
     };
@@ -873,7 +990,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
         if (!selectedProduct || po.items.some(i => i.productId === selectedProductId)) return;
         const newItem = {
             productId: selectedProduct.id,
-            nombreProducto: selectedProduct.nombre,
+            nombreProducto: selectedProduct.nombreVariante, // Actualizado
             cantidad: selectedProduct.udsPorCaja || 1, 
             costoUnidad: selectedProduct.costo, 
             subtotalLinea: selectedProduct.costo * (selectedProduct.udsPorCaja || 1),
@@ -923,8 +1040,9 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
             <div className="flex space-x-2">
                 <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
                     <option value="">Añadir Producto...</option>
+                    {/* Actualizado para usar nombreVariante */}
                     {products.filter(p => !po.items.some(i => i.productId === p.id)).map(p => (
-                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                        <option key={p.id} value={p.id}>{p.nombreVariante}</option>
                     ))}
                 </Select>
                 <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
@@ -1049,22 +1167,22 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
     <PrintableDocument ref={ref} title={`LISTA DE PRECIOS (${client.nombre})`}>
         <div className="text-sm space-y-4">
             <h3 className="text-lg font-bold">Cliente: {client.nombre} ({client.regimen})</h3>
-            <p className="mb-4">Mostrando precios de: **Precio Unidad**</p>
+            <p className="mb-4">Mostrando precios de: **Precio Público**</p> {/* Actualizado */}
             <table className="w-full border-collapse">
                 <thead>
                     <tr className="bg-gray-100 font-semibold">
-                        <td className="p-2 border">Producto</td>
+                        <td className="p-2 border">Nombre / Variante</td> {/* Actualizado */}
                         <td className="p-2 border">Marca</td>
-                        <td className="p-2 border text-right">Precio Unitario</td>
+                        <td className="p-2 border text-right">Precio Público</td> {/* Actualizado */}
                         <td className="p-2 border text-right">Stock (Uds)</td>
                     </tr>
                 </thead>
                 <tbody>
                     {products.map((p) => (
                         <tr key={p.id}>
-                            <td className="p-2 border">{p.nombre}</td>
+                            <td className="p-2 border">{p.nombreVariante}</td> {/* Actualizado */}
                             <td className="p-2 border">{p.marca}</td>
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioPublico)}</td> {/* Actualizado */}
                             <td className="p-2 border text-right">{p.stockTotal}</td>
                         </tr>
                     ))}
@@ -1086,7 +1204,7 @@ const PriceListManager = () => {
         message += `Adjunto la lista de precios actualizada de DistriFort, aplicada a tu régimen *${client.regimen}*.\n\n`;
         message += `*Precios Principales:*\n`;
         products.forEach(p => {
-            message += `- ${p.nombre}: ${FORMAT_CURRENCY(p.precioUnidad)}\n`;
+            message += `- ${p.nombreVariante}: ${FORMAT_CURRENCY(p.precioPublico)}\n`; // Actualizado
         });
         message += `\n*Recuerda:* La lista de precios completa está adjunta en PDF. ¡Esperamos tu pedido!`;
         const subject = `Lista de Precios Actualizada para ${client.nombre}`;
@@ -1130,15 +1248,16 @@ const PriceListManager = () => {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    {["Producto", "Marca", "Precio Unitario", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                                    {/* Actualizado */}
+                                    {["Nombre / Variante", "Marca", "Precio Público", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {products.map(p => (
                                     <tr key={p.id}>
-                                        <td className="px-4 py-4 font-semibold">{p.nombre}</td>
+                                        <td className="px-4 py-4 font-semibold">{p.nombreVariante}</td> {/* Actualizado */}
                                         <td className="px-4 py-4">{p.marca}</td>
-                                        <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioUnidad)}</td>
+                                        <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioPublico)}</td> {/* Actualizado */}
                                         <td className="px-4 py-4 text-right">{p.stockTotal}</td>
                                     </tr>
                                 ))}
@@ -1165,12 +1284,12 @@ const GlobalSearch = () => {
         if (!term) return {};
         const lowerTerm = term.toLowerCase();
         return {
-            products: products.filter(p => p.nombre.toLowerCase().includes(lowerTerm)),
+            products: products.filter(p => p.nombreVariante.toLowerCase().includes(lowerTerm)), // Actualizado
             clients: clients.filter(c => c.nombre.toLowerCase().includes(lowerTerm)),
             orders: orders.filter(o => o.nombreCliente.toLowerCase().includes(lowerTerm)),
         };
     }, [term, products, clients, orders]);
-    return (<div className="space-y-6"><PageHeader title="Búsqueda Global" /><Input placeholder="Buscar productos, clientes, pedidos..." value={term} onChange={e => setTerm(e.target.value)} />{term && Object.entries(results).map(([key, value]) => value.length > 0 && (<div key={key} className="bg-white p-4 rounded-xl shadow-md"><h3 className="text-lg font-bold text-indigo-600 mb-2">{key.charAt(0).toUpperCase() + key.slice(1)} ({value.length})</h3><ul className="space-y-1">{value.map(item => <li key={item.id} className="text-gray-700 p-2 border-b last:border-b-0 hover:bg-gray-50 rounded-md">{item.nombre || item.nombreCliente}</li>)}</ul></div>))}</div>);
+    return (<div className="space-y-6"><PageHeader title="Búsqueda Global" /><Input placeholder="Buscar productos, clientes, pedidos..." value={term} onChange={e => setTerm(e.target.value)} />{term && Object.entries(results).map(([key, value]) => value.length > 0 && (<div key={key} className="bg-white p-4 rounded-xl shadow-md"><h3 className="text-lg font-bold text-indigo-600 mb-2">{key.charAt(0).toUpperCase() + key.slice(1)} ({value.length})</h3><ul className="space-y-1">{value.map(item => <li key={item.id} className="text-gray-700 p-2 border-b last:border-b-0 hover:bg-gray-50 rounded-md">{item.nombreVariante || item.nombreCliente}</li>)}</ul></div>))}</div>); // Actualizado
 };
 
 
@@ -1466,7 +1585,8 @@ const PriceListImporter = () => {
         }
         setLoading(true);
         setImportLog("1. Estructurando datos con IA...");
-        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombre", "costo" y "precioUnidad". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+        // Prompt de IA Actualizado
+        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombreVariante", "costo" y "precioPublico". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
         let jsonResponse;
         try {
             const resultText = await secureGeminiFetch(aiPrompt);
@@ -1484,23 +1604,25 @@ const PriceListImporter = () => {
         let updatesCount = 0;
         const errors = [];
 
+        // Lógica de importación actualizada
         for (const item of jsonResponse) {
-            if (!item.nombre || !item.costo || !item.precioUnidad) {
-                errors.push(`Saltando ítem incompleto: ${item.nombre}`);
+            if (!item.nombreVariante || !item.costo || !item.precioPublico) {
+                errors.push(`Saltando ítem incompleto: ${item.nombreVariante}`);
                 continue;
             }
-            const existingProduct = products.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim());
+            const existingProduct = products.find(p => p.nombreVariante.toLowerCase().trim() === item.nombreVariante.toLowerCase().trim());
             if (existingProduct) {
                 await createOrUpdateDoc('products', {
                     costo: parseFloat(item.costo) || 0,
+                    precioPublico: parseFloat(item.precioPublico) || 0, // Añadido
                 }, existingProduct.id);
                 updatesCount++;
             } else {
                 await createOrUpdateDoc('products', {
                     ...PRODUCT_MODEL,
-                    nombre: item.nombre,
+                    nombreVariante: item.nombreVariante,
                     costo: parseFloat(item.costo) || 0,
-                    precioUnidad: parseFloat(item.precioUnidad) || 0,
+                    precioPublico: parseFloat(item.precioPublico) || 0,
                     marca: `${providerName} / Listado`, 
                 });
                 updatesCount++;
@@ -1636,4 +1758,5 @@ const AppController = () => {
 
     return <AppLayout />;
 };
+
 
