@@ -74,6 +74,8 @@ const CLIENT_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion:
 const ORDER_MODEL = { clienteId: '', nombreCliente: '', items: [], subtotal: 0, costoEnvio: 0, descuento: 0, total: 0, estado: 'Pendiente', archivado: false };
 const PROVIDER_MODEL = { nombre: '', cuit: '', telefono: '', email: '', direccion: '', archivado: false };
 const PURCHASE_ORDER_MODEL = { proveedorId: '', nombreProveedor: '', items: [], costoTotal: 0, estado: 'Pendiente', archivado: false };
+// --- AÑADIDO: Modelo para Listas de Precios ---
+const PRICE_LIST_MODEL = { nombre: 'Lista de Precios', clienteId: '', nombreCliente: '', items: [], costoTotal: 0, precioTotal: 0, archivado: false };
 
 // --- 2b. MAPEADO DE COLECCIONES (Según firestore_collections.js) ---
 const COLLECTION_NAMES = {
@@ -81,7 +83,9 @@ const COLLECTION_NAMES = {
     clients: 'Clientes',
     orders: 'Pedidos',
     providers: 'Proveedores',
-    purchaseOrders: 'OrdenesCompra'
+    purchaseOrders: 'OrdenesCompra',
+    // --- AÑADIDO: Nueva Colección ---
+    listasDePrecios: 'ListasDePrecios'
 };
 
 
@@ -161,7 +165,8 @@ const DataContext = createContext(null);
 const DataProvider = ({ children }) => {
     const { userId, isAuthReady, authDomainError, setAuthDomainError } = useAuth();
     
-    const collections = ['products', 'clients', 'orders', 'providers', 'purchaseOrders'];
+    // --- MODIFICADO: Añadida 'listasDePrecios' ---
+    const collections = ['products', 'clients', 'orders', 'providers', 'purchaseOrders', 'listasDePrecios'];
     
     const state = collections.reduce((acc, name) => {
         acc[name] = useCollection(name);
@@ -557,6 +562,10 @@ const ProductManager = () => {
             <td className="px-4 py-4 font-semibold">{item.nombreVariante}</td>
             <td className="px-4 py-4 hidden sm:table-cell">{item.categoria}</td>
             <td className={`px-4 py-4 ${item.stockTotal <= item.umbralMinimo ? 'text-red-500 font-bold' : ''}`}>{item.stockTotal}</td>
+            {/* --- INICIO DE LA MODIFICACIÓN --- */}
+            {/* Añadimos la columna Costo, oculta en móviles (sm) */}
+            <td className="px-4 py-4 font-mono hidden sm:table-cell">{FORMAT_CURRENCY(item.costo)}</td>
+            {/* --- FIN DE LA MODIFICACIÓN --- */}
             <td className="px-4 py-4">{FORMAT_CURRENCY(item.precioPublico)}</td>
             <td className="px-4 py-4 text-right space-x-2">
                 <Button onClick={onEdit} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
@@ -564,7 +573,10 @@ const ProductManager = () => {
             </td>
         </tr>
     );
-    const ProductTableHeaders = ["Código", "Nombre / Variante", "Categoría", "Stock", "Precio (Público)"];
+    {/* --- INICIO DE LA MODIFICACIÓN --- */}
+    {/* Añadimos "Costo" a las cabeceras */}
+    const ProductTableHeaders = ["Código", "Nombre / Variante", "Categoría", "Stock", "Costo", "Precio (Público)"];
+    {/* --- FIN DE LA MODIFICACIÓN --- */}
     
     return (<div className="space-y-6">
         <PageHeader title="Inventario">
@@ -923,6 +935,9 @@ const OrderManager = () => {
 };
 
 // 8.3 Módulo de Órdenes de Compra (Purchase Orders)
+// --- INICIO DE LA CORRECCIÓN: Módulo Restaurado ---
+
+// Helper: Generar enlaces de comunicación para OC
 const generatePurchaseOrderLink = (provider, po) => {
     if (!provider) return { whatsapp: null, email: null };
     const poDate = po.timestamp ? new Date(po.timestamp.seconds * 1000).toLocaleDateString() : 'N/A';
@@ -933,6 +948,7 @@ const generatePurchaseOrderLink = (provider, po) => {
     body += `*Costo Total Estimado: ${formattedCost}*\n\n`;
     body += `*Detalle de Productos:*\n`;
     po.items.forEach(item => {
+        // Usamos nombreProducto porque ese es el campo guardado en el item de la OC
         body += `- ${item.cantidad}x ${item.nombreProducto} (Costo Un: ${FORMAT_CURRENCY(item.costoUnidad)})\n`;
     });
     body += `\nEstado: ${po.estado}.\n\nPor favor, confirme la recepción y la fecha de entrega.\n\nSaludos,\nDistriFort`;
@@ -943,6 +959,7 @@ const generatePurchaseOrderLink = (provider, po) => {
     return { whatsapp: whatsappLink, email: emailLink };
 };
 
+// Helper: Componente Imprimible de OC
 const PurchaseOrderPrintable = React.forwardRef(({ po, provider }, ref) => (
     <PrintableDocument ref={ref} title={`ORDEN DE COMPRA N° ${po.id || 'N/A'}`}>
         <div className="text-sm space-y-4">
@@ -981,7 +998,7 @@ const PurchaseOrderPrintable = React.forwardRef(({ po, provider }, ref) => (
     </PrintableDocument>
 ));
 
-
+// Helper: Formulario de OC
 const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => {
     const [po, setPo] = useState(model);
     const [selectedProductId, setSelectedProductId] = useState('');
@@ -1006,7 +1023,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
         if (!selectedProduct || po.items.some(i => i.productId === selectedProductId)) return;
         const newItem = {
             productId: selectedProduct.id,
-            nombreProducto: selectedProduct.nombreVariante, // Actualizado
+            nombreProducto: selectedProduct.nombreVariante, // Usamos nombreVariante
             cantidad: selectedProduct.udsPorCaja || 1, 
             costoUnidad: selectedProduct.costo, 
             subtotalLinea: selectedProduct.costo * (selectedProduct.udsPorCaja || 1),
@@ -1056,9 +1073,8 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
             <div className="flex space-x-2">
                 <Select label="Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
                     <option value="">Añadir Producto...</option>
-                    {/* Actualizado para usar nombreVariante */}
                     {products.filter(p => !po.items.some(i => i.productId === p.id)).map(p => (
-                        <option key={p.id} value={p.id}>{p.nombreVariante}</option>
+                        <option key={p.id} value={p.id}>{p.nombreVariante}</option> // Usamos nombreVariante
                     ))}
                 </Select>
                 <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
@@ -1100,6 +1116,7 @@ const PurchaseOrderForm = ({ model, onSave, onCancel, products, providers }) => 
     );
 };
 
+// Componente Principal de OC
 const PurchaseOrderManager = () => {
     const { purchaseOrders, providers, products, createOrUpdateDoc, archiveDoc } = useData();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1177,125 +1194,282 @@ const PurchaseOrderManager = () => {
         </div>
     </div>);
 };
+// --- FIN DE LA CORRECCIÓN ---
 
-// 8.4 Módulo Lista de Precios
-const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
-    <PrintableDocument ref={ref} title={`LISTA DE PRECIOS (${client.nombre})`}>
+// =================================================================
+// INICIO DE LA MODIFICACIÓN: Sección 8.4 Reemplazada
+// =================================================================
+
+// 8.4 Módulo Listas de Precios (Editable)
+
+const PriceListPrintable = React.forwardRef(({ priceList, client }, ref) => (
+    <PrintableDocument ref={ref} title={`LISTA DE PRECIOS: ${priceList.nombre}`}>
         <div className="text-sm space-y-4">
-            <h3 className="text-lg font-bold">Cliente: {client.nombre} ({client.regimen})</h3>
-            <p className="mb-4">Mostrando precios de: **Precio Público**</p> {/* Actualizado */}
+            <h3 className="text-lg font-bold">Cliente: {client?.nombre || priceList.nombreCliente}</h3>
+            {client && <p className="text-sm">Régimen: {client.regimen}</p>}
+            <h3 className="text-lg font-bold mt-6 border-t pt-4">Detalle de Productos</h3>
             <table className="w-full border-collapse">
                 <thead>
                     <tr className="bg-gray-100 font-semibold">
-                        <td className="p-2 border">Nombre / Variante</td> {/* Actualizado */}
-                        <td className="p-2 border">Marca</td>
-                        <td className="p-2 border">Proveedor</td> {/* Añadido */}
-                        <td className="p-2 border text-right">Costo</td> {/* Añadido */}
-                        <td className="p-2 border text-right">Precio Público</td> {/* Actualizado */}
-                        <td className="p-2 border text-right">Stock (Uds)</td>
+                        <td className="p-2 border">Producto</td>
+                        <td className="p-2 border text-right">Cantidad</td>
+                        <td className="p-2 border text-right">Costo Unitario</td>
+                        <td className="p-2 border text-right">Precio Unitario</td>
+                        <td className="p-2 border text-right">Subtotal Costo</td>
+                        <td className="p-2 border text-right">Subtotal Precio</td>
                     </tr>
                 </thead>
                 <tbody>
-                    {products.map((p) => (
-                        <tr key={p.id}>
-                            <td className="p-2 border">{p.nombreVariante}</td> {/* Actualizado */}
-                            <td className="p-2 border">{p.marca}</td>
-                            <td className="p-2 border">{p.nombreProveedor}</td> {/* Añadido */}
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(p.costo)}</td> {/* Añadido */}
-                            <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioPublico)}</td> {/* Actualizado */}
-                            <td className="p-2 border text-right">{p.stockTotal}</td>
+                    {priceList.items.map((item, index) => (
+                        <tr key={index}>
+                            <td className="p-2 border">{item.nombreProducto}</td>
+                            <td className="p-2 border text-right">{item.cantidad}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.costoUnidad)}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.precioUnidad)}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.subtotalCosto)}</td>
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(item.subtotalPrecio)}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
+            <div className="flex justify-end pt-4">
+                <div className="w-64 space-y-1">
+                    <p className="flex justify-between font-bold">
+                        <span>Costo Total:</span> 
+                        <span>{FORMAT_CURRENCY(priceList.costoTotal)}</span>
+                    </p>
+                    <p className="flex justify-between font-bold text-xl border-t pt-2">
+                        <span>PRECIO TOTAL:</span> 
+                        <span>{FORMAT_CURRENCY(priceList.precioTotal)}</span>
+                    </p>
+                </div>
+            </div>
         </div>
     </PrintableDocument>
 ));
 
-const PriceListManager = () => {
-    const { products, clients } = useData();
-    const [selectedClientId, setSelectedClientId] = useState('');
-    const componentRef = useRef(); 
-    const client = useMemo(() => clients.find(c => c.id === selectedClientId), [clients, selectedClientId]);
-    const handlePrint = () => window.print();
-    const generatePriceListMessage = useCallback((client, products) => {
-        if (!client) return { whatsapp: null, email: null };
-        let message = `¡Hola ${client.nombre}!\n\n`;
-        message += `Adjunto la lista de precios actualizada de DistriFort, aplicada a tu régimen *${client.regimen}*.\n\n`;
-        message += `*Precios Principales:*\n`;
-        products.forEach(p => {
-            message += `- ${p.nombreVariante}: ${FORMAT_CURRENCY(p.precioPublico)}\n`; // Actualizado
-        });
-        message += `\n*Recuerda:* La lista de precios completa está adjunta en PDF. ¡Esperamos tu pedido!`;
-        const subject = `Lista de Precios Actualizada para ${client.nombre}`;
-        const cleanPhone = client.telefono ? client.telefono.replace(/\D/g, '') : null;
-        const phoneNumber = cleanPhone && cleanPhone.length >= 10 ? `549${cleanPhone}` : cleanPhone;
-        return { 
-            whatsapp: phoneNumber ? `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}` : null,
-            email: client.email ? `mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}` : null,
-        };
-    }, [products]);
 
-    const communicationLinks = useMemo(() => {
-        return client ? generatePriceListMessage(client, products) : { whatsapp: null, email: null };
-    }, [client, products, generatePriceListMessage]);
+const PriceListForm = ({ model, onSave, onCancel }) => {
+    const { clients, products } = useData(); 
+    const [priceList, setPriceList] = useState(model);
+    const [selectedProductId, setSelectedProductId] = useState('');
+    const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [selectedProductId, products]);
+
+    // Recalcular totales
+    useEffect(() => {
+        const costoTotal = priceList.items.reduce((sum, item) => sum + (item.subtotalCosto || 0), 0);
+        const precioTotal = priceList.items.reduce((sum, item) => sum + (item.subtotalPrecio || 0), 0);
+        setPriceList(prev => ({ ...prev, costoTotal, precioTotal }));
+    }, [priceList.items]);
+
+    const handleHeaderChange = e => {
+        const { name, value, type } = e.target;
+        let newList = { ...priceList, [name]: type === 'number' ? parseFloat(value) || 0 : value };
+        if (name === 'clienteId') {
+            const client = clients.find(c => c.id === value);
+            newList.nombreCliente = client ? client.nombre : '';
+        }
+        setPriceList(newList);
+    };
+
+    const handleAddItem = () => {
+        if (!selectedProduct || priceList.items.some(i => i.productId === selectedProductId)) return;
+        
+        const newItem = {
+            productId: selectedProduct.id,
+            nombreProducto: selectedProduct.nombreVariante,
+            cantidad: 1,
+            // Tomamos los precios del inventario como base
+            costoUnidad: selectedProduct.costo, 
+            precioUnidad: selectedProduct.precioPublico,
+            // Calculamos subtotales
+            subtotalCosto: selectedProduct.costo * 1,
+            subtotalPrecio: selectedProduct.precioPublico * 1,
+        };
+        setPriceList(prev => ({ ...prev, items: [...prev.items, newItem] }));
+        setSelectedProductId('');
+    };
+
+    // Esta función permite editar costo, precio y cantidad
+    const handleUpdateItem = (index, key, value) => {
+        const newItems = [...priceList.items];
+        const numericValue = parseFloat(value) || 0;
+        
+        const item = newItems[index];
+        item[key] = numericValue; // Actualiza costo, precio o cantidad
+        
+        // Recalcular subtotales
+        item.subtotalCosto = (item.costoUnidad || 0) * (item.cantidad || 0);
+        item.subtotalPrecio = (item.precioUnidad || 0) * (item.cantidad || 0);
+        
+        setPriceList(prev => ({ ...prev, items: newItems }));
+    };
+
+    const handleRemoveItem = (index) => {
+        const newItems = priceList.items.filter((_, i) => i !== index);
+        setPriceList(prev => ({ ...prev, items: newItems }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (priceList.items.length === 0) {
+            console.error("La lista debe tener al menos un producto.");
+            return;
+        }
+        onSave(priceList); // Pasamos la lista completa al Manager para guardar
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b pb-4">
+                <Input label="Nombre de la Lista" name="nombre" value={priceList.nombre} onChange={handleHeaderChange} required placeholder="Ej: Octubre2025"/>
+                <Select label="Cliente (Opcional)" name="clienteId" value={priceList.clienteId} onChange={handleHeaderChange}>
+                    <option value="">-- Sin cliente (Genérica) --</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </Select>
+            </div>
+            
+            <h4 className="text-lg font-semibold text-gray-700">Productos en la Lista</h4>
+            <div className="flex space-x-2">
+                <Select label="Añadir Producto" name="selectedProduct" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    {products.filter(p => !priceList.items.some(i => i.productId === p.id)).map(p => (
+                        <option key={p.id} value={p.id}>{p.nombreVariante} ({p.stockTotal} en stock)</option>
+                    ))}
+                </Select>
+                <Button onClick={handleAddItem} disabled={!selectedProduct} icon={Plus} className="self-end !px-3 !py-2">Añadir</Button>
+            </div>
+            
+            {priceList.items.length > 0 && (
+                <div className="bg-gray-50 p-3 rounded-lg overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead>
+                            <tr className="border-b text-left text-gray-600">
+                                <th className="py-2 px-1">Producto</th>
+                                <th className="py-2 px-1 w-20">Cant.</th>
+                                <th className="py-2 px-1 w-24 text-right">Costo Un. ($)</th>
+                                <th className="py-2 px-1 w-24 text-right">Precio Un. ($)</th>
+                                <th className="py-2 px-1 w-24 text-right">Subtotal ($)</th>
+                                <th className="py-2 px-1 w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {priceList.items.map((item, index) => (
+                                <tr key={item.productId || index} className="border-b hover:bg-white">
+                                    <td className="py-2 px-1 font-medium text-gray-800">{item.nombreProducto}</td>
+                                    {/* --- CAMPOS EDITABLES --- */}
+                                    <td className="py-2 px-1">
+                                        <input type="number" min="1" step="1" value={item.cantidad} onChange={e => handleUpdateItem(index, 'cantidad', e.target.value)} className="w-full p-1 border rounded text-center"/>
+                                    </td>
+                                    <td className="py-2 px-1 text-right">
+                                        <input type="number" value={item.costoUnidad} onChange={e => handleUpdateItem(index, 'costoUnidad', e.target.value)} className="w-full p-1 border rounded text-right"/>
+                                    </td>
+                                    <td className="py-2 px-1 text-right">
+                                        <input type="number" value={item.precioUnidad} onChange={e => handleUpdateItem(index, 'precioUnidad', e.target.value)} className="w-full p-1 border rounded text-right"/>
+                                    </td>
+                                    {/* --- FIN CAMPOS EDITABLES --- */}
+                                    <td className="py-2 px-1 text-right font-semibold text-gray-900">{FORMAT_CURRENCY(item.subtotalPrecio)}</td>
+                                    <td className="py-2 px-1 text-right">
+                                        <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+            
+            <div className="flex justify-end pt-4 space-y-2 flex-col items-end">
+                <p className="text-md font-medium">Costo Total: <span className="font-bold">{FORMAT_CURRENCY(priceList.costoTotal)}</span></p>
+                <p className="text-xl font-bold pt-2 border-t-2 border-indigo-200">Precio Total: <span className="text-indigo-600">{FORMAT_CURRENCY(priceList.precioTotal)}</span></p>
+            </div>
+            
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+                <Button onClick={onCancel} className="bg-gray-200 text-gray-800 hover:bg-gray-300">Cancelar</Button>
+                <Button type="submit" icon={Save}>Guardar Lista</Button>
+            </div>
+        </form>
+    );
+};
+
+const PriceListManager = () => {
+    // Usamos la nueva colección 'listasDePrecios'
+    const { listasDePrecios, clients, createOrUpdateDoc, archiveDoc } = useData();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
+    const componentRef = useRef(); 
+
+    const handleSave = async (itemData) => { 
+        // Guardamos en la nueva colección
+        await createOrUpdateDoc('listasDePrecios', itemData, selectedItem?.id); 
+        setIsModalOpen(false); 
+        setSelectedItem(null); 
+    };
+    
+    const handleEdit = (item) => { setSelectedItem(item); setIsModalOpen(true); };
+    const handleAddNew = () => { setSelectedItem(null); setIsModalOpen(true); };
+    const handlePrint = () => window.print();
+    
+    const sortedLists = useMemo(() => listasDePrecios.slice().sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)), [listasDePrecios]);
+    
+    const getClientForList = useCallback((list) => {
+        return clients.find(c => c.id === list.clienteId);
+    }, [clients]);
 
     return (
         <div className="space-y-6">
-            <PageHeader title="Lista de Precios">
-                <Select label="Seleccionar Cliente" name="client" value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)}>
-                    <option value="">-- Seleccionar para Personalizar --</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.regimen})</option>)}
-                </Select>
+            <PageHeader title="Listas de Precios Guardadas">
+                <Button onClick={handleAddNew} icon={Plus}>Crear Nueva Lista</Button>
             </PageHeader>
-            {client && (
-                <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
-                    <h3 className="text-xl font-bold text-gray-800">Precios para {client.nombre}</h3>
-                    <div className="flex space-x-3 no-print">
-                        <Button onClick={handlePrint} icon={Printer} className="!bg-blue-500 hover:!bg-blue-600">Imprimir / Guardar PDF</Button>
-                        {communicationLinks.whatsapp && (
-                            <a href={communicationLinks.whatsapp} target="_blank" rel="noopener noreferrer">
-                                <Button icon={Send} className="!bg-green-500 hover:!bg-green-600">Enviar WhatsApp</Button>
-                            </a>
-                        )}
-                        {communicationLinks.email && (
-                            <a href={communicationLinks.email} target="_blank" rel="noopener noreferrer">
-                                <Button icon={Mail} className="!bg-gray-500 hover:!bg-gray-600">Enviar Email</Button>
-                            </a>
-                        )}
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    {/* Actualizado */}
-                                    {["Nombre / Variante", "Marca", "Proveedor", "Costo", "Precio Público", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {products.map(p => (
-                                    <tr key={p.id}>
-                                        <td className="px-4 py-4 font-semibold">{p.nombreVariante}</td> {/* Actualizado */}
-                                        <td className="px-4 py-4">{p.marca}</td>
-                                        <td className="px-4 py-4 hidden sm:table-cell">{p.nombreProveedor}</td> {/* Añadido */}
-                                        <td className="px-4 py-4 text-right hidden md:table-cell">{FORMAT_CURRENCY(p.costo)}</td> {/* Añadido */}
-                                        <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioPublico)}</td> {/* Actualizado */}
-                                        <td className="px-4 py-4 text-right">{p.stockTotal}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-            {client && (
+            
+            {isModalOpen && <Modal title={(selectedItem ? "Editar " : "Nueva ") + "Lista de Precios"} onClose={() => setIsModalOpen(false)}>
+                <PriceListForm 
+                    model={selectedItem || PRICE_LIST_MODEL} 
+                    onSave={handleSave} 
+                    onCancel={() => setIsModalOpen(false)} 
+                />
+            </Modal>}
+            
+            {selectedItem && (
                  <div className="hidden no-print">
-                     <PriceListPrintable ref={componentRef} products={products} client={client} />
+                     <PriceListPrintable ref={componentRef} priceList={selectedItem} client={getClientForList(selectedItem)} />
                  </div>
             )}
+            
+            <div className="bg-white shadow-lg rounded-xl overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            {["Nombre Lista", "Cliente Asignado", "Costo Total", "Precio Total", "Fecha"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {sortedLists.map(item => {
+                            const client = getClientForList(item);
+                            return (<tr key={item.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-4 font-semibold">{item.nombre}</td>
+                                <td className="px-4 py-4">{item.nombreCliente || <span className="text-gray-400 italic">-- Genérica --</span>}</td>
+                                <td className="px-4 py-4 font-mono">{FORMAT_CURRENCY(item.costoTotal)}</td>
+                                <td className="px-4 py-4 font-mono font-bold">{FORMAT_CURRENCY(item.precioTotal)}</td>
+                                <td className="px-4 py-4 text-sm">{item.timestamp ? new Date(item.timestamp.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
+                                <td className="px-4 py-4 text-right space-x-2 flex justify-end">
+                                    <Button onClick={() => { setSelectedItem(item); setTimeout(handlePrint, 50); }} className="!p-2 !bg-blue-500 hover:!bg-blue-600" icon={Printer} title="Imprimir / Guardar PDF"/>
+                                    <Button onClick={() => handleEdit(item)} className="!p-2 !bg-gray-200 !text-gray-700 hover:!bg-gray-300"><Edit className="w-4 h-4" /></Button>
+                                    <Button onClick={() => archiveDoc('listasDePrecios', item.id)} className="!p-2 !bg-red-500 hover:!bg-red-600"><Trash2 className="w-4 h-4" /></Button>
+                                </td>
+                            </tr>);
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
+
+// =================================================================
+// FIN DE LA MODIFICACIÓN: Sección 8.4 Reemplazada
+// =================================================================
 
 
 // 8.5 Módulo Búsqueda Global
@@ -1769,7 +1943,8 @@ const AppLayout = () => {
         { name: 'Dashboard', icon: LayoutDashboard }, { name: 'Inventario', icon: Package },
         { name: 'Clientes', icon: Users }, { name: 'Proveedores', icon: Building },
         { name: 'Pedidos', icon: ShoppingCart }, { name: 'Órdenes de Compra', icon: Truck },
-        { name: 'Lista de Precios', icon: FileText }, 
+        // --- MODIFICADO: Título del menú ---
+        { name: 'Listas de Precios', icon: FileText }, 
         { name: 'Importar Lista (IA)', icon: Upload }, 
         { name: 'Buscar', icon: Search }, { name: 'Herramientas', icon: BrainCircuit },
         { name: 'Cotización', icon: MapPin }, 
@@ -1787,7 +1962,8 @@ const AppLayout = () => {
             case 'Proveedores': return <ProviderManager />;
             case 'Pedidos': return <OrderManager />; 
             case 'Órdenes de Compra': return <PurchaseOrderManager />;
-            case 'Lista de Precios': return <PriceListManager />;
+            // --- MODIFICADO: Renderizado del nuevo módulo ---
+            case 'Listas de Precios': return <PriceListManager />;
             case 'Importar Lista (IA)': return <PriceListImporter />; 
             case 'Buscar': return <GlobalSearch />; 
             case 'Herramientas': return <Tools />; 
@@ -1849,6 +2025,9 @@ const AppController = () => {
 
     return <AppLayout />;
 };
+
+
+
 
 
 
