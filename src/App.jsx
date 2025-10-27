@@ -282,7 +282,12 @@ const PrintableDocument = React.forwardRef(({ children, title, logoText = "Distr
 // --- 6. LÓGICA DE IA (GEMINI) ---
 const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
     try {
-        const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-pro';
+        // --- INICIO DE LA CORRECCIÓN ---
+        // El modelo 'gemini-pro' no está disponible en este entorno. 
+        // Usamos el modelo flash_preview_09_2025 para generación de texto.
+        const model = isImageGeneration ? 'imagen-3.0-generate-002' : 'gemini-2.5-flash-preview-09-2025';
+        // --- FIN DE LA CORRECCIÓN ---
+        
         const apiKey = ""; // API Key is provided by Canvas runtime.
         const apiUrl = isImageGeneration 
             ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
@@ -1592,8 +1597,9 @@ const PriceListImporter = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        // El providerId sigue siendo útil para asignar el proveedor
         if (!providerId) {
-            setImportLog("Error: Debes seleccionar un proveedor.");
+            setImportLog("Error: Debes seleccionar un proveedor de referencia.");
             return;
         }
         if (!listText.trim()) {
@@ -1601,54 +1607,122 @@ const PriceListImporter = () => {
             return;
         }
         setLoading(true);
-        setImportLog("1. Estructurando datos con IA...");
-        // Prompt de IA Actualizado
-        const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombreVariante", "costo" y "precioPublico". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+        setImportLog("1. Leyendo datos...");
+        
         let jsonResponse;
         try {
-            const resultText = await secureGeminiFetch(aiPrompt);
-            const cleanedText = resultText.replace(/```json|```/g, '').trim();
-            jsonResponse = JSON.parse(cleanedText);
-            setImportLog("2. Datos estructurados correctamente. Procesando importación...");
-        } catch (e) {
-            console.error("AI/JSON Parsing Error:", e);
-            setImportLog(`Error: Fallo al procesar los datos con IA. Asegúrate de que el formato de texto sea claro.`);
-            setLoading(false);
-            return;
-        }
+            // MODIFICACIÓN: Primero intentamos parsear el texto como JSON directo.
+            jsonResponse = JSON.parse(listText);
+            setImportLog("2. Formato JSON detectado. Procesando importación directa...");
+            // Si tiene éxito, procesamos con la lógica de JSON directo
+            await processImport(jsonResponse, providerId, 'json');
 
-        const providerName = providers.find(p => p.id === providerId)?.nombre || 'Desconocido';
+        } catch (e) {
+            // FALLBACK: Si falla el parseo, asumimos que es texto plano y usamos la IA.
+            console.error("No es JSON válido, intentando con IA:", e);
+            setImportLog("2. Formato de texto plano detectado. Procesando con IA...");
+            
+            const aiPrompt = `Actúa como un parser de datos. Transforma la siguiente lista de precios, que contiene nombres de productos y precios/costos, en un único objeto JSON. El JSON debe ser un ARRAY de OBJETOS. Cada objeto en el array DEBE tener las claves "nombreVariante", "costo" y "precioPublico". Solo devuelve el JSON, sin texto explicativo. Si no encuentras un valor, usa 0. Aquí está el texto: \n\n${listText}`;
+            try {
+                const resultText = await secureGeminiFetch(aiPrompt);
+
+                // --- INICIO DE LA CORRECCIÓN ---
+                // Verificamos si la IA devolvió un string de error
+                if (resultText.startsWith("Hubo un error")) {
+                    // Si es un error, lo mostramos en el log y salimos.
+                    setImportLog(`Error de IA: ${resultText}`);
+                    setLoading(false);
+                    return;
+                }
+                // --- FIN DE LA CORRECCIÓN ---
+
+                const cleanedText = resultText.replace(/```json|```/g, '').trim();
+                jsonResponse = JSON.parse(cleanedText);
+                setImportLog("3. Datos estructurados por IA. Procesando importación...");
+                // Esta rama (IA) espera "nombreVariante", "costo", "precioPublico"
+                await processImport(jsonResponse, providerId, 'ia');
+
+            } catch (aiError) {
+                console.error("AI/JSON Parsing Error:", aiError);
+                setImportLog(`Error: Fallo al procesar los datos. El texto no es un JSON válido y la IA tampoco pudo interpretarlo.`);
+                setLoading(false);
+                return;
+            }
+        }
+        
+        setLoading(false);
+    };
+
+    // --- NUEVA FUNCIÓN ---
+    // Extraemos la lógica de procesamiento para manejar ambos casos (JSON directo vs IA)
+    const processImport = async (data, selectedProviderId, mode) => {
+        const providerName = providers.find(p => p.id === selectedProviderId)?.nombre || 'Importado';
         let updatesCount = 0;
         const errors = [];
 
-        // Lógica de importación actualizada
-        for (const item of jsonResponse) {
-            if (!item.nombreVariante || !item.costo || !item.precioPublico) {
-                errors.push(`Saltando ítem incompleto: ${item.nombreVariante}`);
-                continue;
-            }
-            const existingProduct = products.find(p => p.nombreVariante.toLowerCase().trim() === item.nombreVariante.toLowerCase().trim());
-            if (existingProduct) {
-                await createOrUpdateDoc('products', {
-                    costo: parseFloat(item.costo) || 0,
-                    precioPublico: parseFloat(item.precioPublico) || 0, // Añadido
-                }, existingProduct.id);
-                updatesCount++;
+        for (const item of data) {
+            let productData = {};
+
+            // Mapeamos los campos según el modo de importación
+            if (mode === 'json') {
+                // Modo JSON directo (con las claves del usuario)
+                const nombreVariante = item["Nombre del Producto (Variedad)"];
+                if (!nombreVariante) {
+                    errors.push(`Saltando ítem sin "Nombre del Producto (Variedad)"`);
+                    continue;
+                }
+                productData = {
+                    nombreVariante: nombreVariante,
+                    categoria: item["Tipo de Bebida"] || '',
+                    marca: item["Bodega/Marca"] || '',
+                    presentacion: item["Presentacion"] || '',
+                    precioPublico: parseFloat(item["Precio por Unidad (ARS)"]) || 0,
+                    costo: 0, // El JSON del usuario no tiene costo, asumimos 0
+                    proveedorId: selectedProviderId, // Asignamos el proveedor seleccionado
+                    nombreProveedor: providerName
+                };
             } else {
-                await createOrUpdateDoc('products', {
-                    ...PRODUCT_MODEL,
+                // Modo IA (espera claves "nombreVariante", "costo", "precioPublico")
+                if (!item.nombreVariante) {
+                    errors.push(`Saltando ítem incompleto (IA): ${JSON.stringify(item)}`);
+                    continue;
+                }
+                productData = {
                     nombreVariante: item.nombreVariante,
                     costo: parseFloat(item.costo) || 0,
                     precioPublico: parseFloat(item.precioPublico) || 0,
-                    marca: `${providerName} / Listado`, 
+                    marca: `${providerName} / Listado`, // Usamos el default de IA
+                    proveedorId: selectedProviderId,
+                    nombreProveedor: providerName
+                };
+            }
+            
+            // Lógica de actualización (común para ambos)
+            const existingProduct = products.find(p => p.nombreVariante.toLowerCase().trim() === productData.nombreVariante.toLowerCase().trim());
+            
+            if (existingProduct) {
+                // Actualizamos el producto existente
+                await createOrUpdateDoc('products', {
+                    ...existingProduct, // Mantenemos datos existentes
+                    ...productData, // Sobreescribimos con los datos importados
+                    costo: productData.costo || existingProduct.costo, // No sobreescribir costo con 0 si ya existe
+                    precioPublico: productData.precioPublico || existingProduct.precioPublico,
+                }, existingProduct.id);
+                updatesCount++;
+            } else {
+                // Creamos un nuevo producto
+                await createOrUpdateDoc('products', {
+                    ...PRODUCT_MODEL, // Empezamos con el modelo base
+                    ...productData, // Aplicamos los datos importados
                 });
                 updatesCount++;
             }
         }
+        
         setImportLog(`Éxito: Se procesaron ${updatesCount} ítems (${errors.length} errores/saltos). Productos creados/actualizados en el Inventario.`);
-        setLoading(false);
         setListText('');
     };
+    // --- FIN DE NUEVA FUNCIÓN ---
 
     return (
         <div className="space-y-6">
@@ -1662,18 +1736,18 @@ const PriceListImporter = () => {
                         {providers.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </Select>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Pegar Contenido de la Lista (PDF/Excel)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pegar Contenido de la Lista (JSON o Texto Plano)</label>
                         <textarea 
                             value={listText}
                             onChange={e => setListText(e.target.value)}
                             rows="10"
-                            placeholder="Copia y pega el texto de tu lista de precios aquí. Asegúrate de incluir el nombre del producto y su costo/precio."
+                            placeholder="Copia y pega el JSON de tu lista de precios aquí, o pega el texto plano de un PDF/Excel para que la IA lo procese."
                             className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                             required
                         />
                     </div>
                     <Button type="submit" icon={Upload} disabled={loading || !providerId || !listText.trim()}>
-                        {loading ? 'Procesando con IA...' : 'Importar Productos y Precios'}
+                        {loading ? 'Procesando...' : 'Importar Productos y Precios'}
                     </Button>
                 </form>
                 {importLog && (
@@ -1775,6 +1849,8 @@ const AppController = () => {
 
     return <AppLayout />;
 };
+
+
 
 
 
