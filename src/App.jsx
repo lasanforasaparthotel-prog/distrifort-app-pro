@@ -300,7 +300,17 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || `Error en el servidor de IA (${model}).`);
+            
+            // --- INICIO DE LA CORRECCIÓN ---
+            // `errorData.error` es un objeto (ej: { message: '...', code: ... }).
+            // Necesitamos extraer el 'message' de adentro, no pasar el objeto entero a new Error().
+            // Si no hay un .message, intentamos convertir todo el error a texto.
+            const errorMessage = errorData.error?.message || 
+                                 JSON.stringify(errorData.error) || 
+                                 `Error en el servidor de IA (${model}).`;
+            
+            throw new Error(errorMessage);
+            // --- FIN DE LA CORRECCIÓN ---
         }
         
         const data = await response.json();
@@ -315,6 +325,7 @@ const secureGeminiFetch = async (prompt, isImageGeneration = false) => {
 
     } catch (error) {
         console.error("Error fetching Gemini/Imagen:", error);
+        // Esta línea ahora es segura porque `error.message` será un string.
         return `Hubo un error al conectar con el asistente de IA. Error: ${error.message}`;
     }
 };
@@ -1173,6 +1184,8 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                     <tr className="bg-gray-100 font-semibold">
                         <td className="p-2 border">Nombre / Variante</td> {/* Actualizado */}
                         <td className="p-2 border">Marca</td>
+                        <td className="p-2 border">Proveedor</td> {/* Añadido */}
+                        <td className="p-2 border text-right">Costo</td> {/* Añadido */}
                         <td className="p-2 border text-right">Precio Público</td> {/* Actualizado */}
                         <td className="p-2 border text-right">Stock (Uds)</td>
                     </tr>
@@ -1182,6 +1195,8 @@ const PriceListPrintable = React.forwardRef(({ products, client }, ref) => (
                         <tr key={p.id}>
                             <td className="p-2 border">{p.nombreVariante}</td> {/* Actualizado */}
                             <td className="p-2 border">{p.marca}</td>
+                            <td className="p-2 border">{p.nombreProveedor}</td> {/* Añadido */}
+                            <td className="p-2 border text-right">{FORMAT_CURRENCY(p.costo)}</td> {/* Añadido */}
                             <td className="p-2 border text-right">{FORMAT_CURRENCY(p.precioPublico)}</td> {/* Actualizado */}
                             <td className="p-2 border text-right">{p.stockTotal}</td>
                         </tr>
@@ -1249,7 +1264,7 @@ const PriceListManager = () => {
                             <thead className="bg-gray-50">
                                 <tr>
                                     {/* Actualizado */}
-                                    {["Nombre / Variante", "Marca", "Precio Público", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                                    {["Nombre / Variante", "Marca", "Proveedor", "Costo", "Precio Público", "Stock (Uds)"].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -1257,6 +1272,8 @@ const PriceListManager = () => {
                                     <tr key={p.id}>
                                         <td className="px-4 py-4 font-semibold">{p.nombreVariante}</td> {/* Actualizado */}
                                         <td className="px-4 py-4">{p.marca}</td>
+                                        <td className="px-4 py-4 hidden sm:table-cell">{p.nombreProveedor}</td> {/* Añadido */}
+                                        <td className="px-4 py-4 text-right hidden md:table-cell">{FORMAT_CURRENCY(p.costo)}</td> {/* Añadido */}
                                         <td className="px-4 py-4 text-right">{FORMAT_CURRENCY(p.precioPublico)}</td> {/* Actualizado */}
                                         <td className="px-4 py-4 text-right">{p.stockTotal}</td>
                                     </tr>
@@ -1758,5 +1775,7 @@ const AppController = () => {
 
     return <AppLayout />;
 };
+
+
 
 
